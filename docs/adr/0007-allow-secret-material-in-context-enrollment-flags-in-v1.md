@@ -1,0 +1,3 @@
+# Allow Secret Material in Context Enrollment flags in v1
+
+Cloak will allow Context Enrollment commands to receive Secret Material through command-line flags in the initial product, matching the behavior of the underlying CLIs even though this can expose secrets through shell history, process listings, logs, or agent transcripts. We chose this for v1 simplicity and compatibility with existing CLI workflows; Cloak will not distinguish between human-driven and agent-driven enrollment, so any Secret Material shared with an agent during enrollment is the operator's responsibility. Tightening this later remains important because Cloak's long-term goal is safer normal operation around credential-bearing CLIs.

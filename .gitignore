@@ -1,0 +1,12 @@
+# Go build/test artifacts
+/cloak
+/bin/
+/dist/
+*.test
+*.out
+coverage.out
+
+# Local editor/OS files
+.DS_Store
+.idea/
+.vscode/
