@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"cloak/internal/contextstore"
-	"cloak/internal/secrets"
+	"github.com/lakisyaman/cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/secrets"
 
 	"github.com/zalando/go-keyring"
 )

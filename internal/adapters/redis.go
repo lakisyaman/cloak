@@ -3,7 +3,7 @@ package adapters
 import (
 	"fmt"
 
-	"cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
 type RedisCLI struct{}

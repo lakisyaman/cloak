@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"cloak/internal/app"
-	"cloak/internal/contextstore"
-	"cloak/internal/secrets"
-	"cloak/internal/shim"
+	"github.com/lakisyaman/cloak/internal/app"
+	"github.com/lakisyaman/cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/secrets"
+	"github.com/lakisyaman/cloak/internal/shim"
 
 	"github.com/testcontainers/testcontainers-go"
 	tcexec "github.com/testcontainers/testcontainers-go/exec"

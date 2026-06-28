@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"cloak/internal/adapters"
-	"cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
 type mutableContextStore struct {

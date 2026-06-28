@@ -1,6 +1,6 @@
 package adapters
 
-import "cloak/internal/contextstore"
+import "github.com/lakisyaman/cloak/internal/contextstore"
 
 type Invocation struct {
 	Args []string

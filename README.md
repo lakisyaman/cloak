@@ -50,6 +50,58 @@ Cloak is implemented in Go with:
 - `github.com/zalando/go-keyring` for OS secret storage.
 - symlink shims pointing to the `cloak` binary.
 
+## Installation
+
+### Install script (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lakisyaman/cloak/main/install.sh | sh
+```
+
+This downloads the prebuilt binary for your OS/architecture from the latest
+[GitHub release](https://github.com/lakisyaman/cloak/releases), verifies its checksum,
+and installs it to `~/.local/bin` (override with `CLOAK_INSTALL_DIR`). Install a specific
+version with `... | sh -s -- v0.1.0`.
+
+### Prebuilt binaries
+
+Download the `tar.gz` for your platform from the
+[releases page](https://github.com/lakisyaman/cloak/releases), extract the `cloak`
+binary, and put it on your `PATH`. Each release publishes a `checksums.txt`.
+
+### With Go
+
+```bash
+go install github.com/lakisyaman/cloak/cmd/cloak@latest
+```
+
+### Homebrew
+
+Planned for a future release.
+
+## Quickstart
+
+Install a shim for a Managed CLI, then put the shim directory ahead of the real CLI on
+your `PATH` — this is what makes the shim take effect:
+
+```bash
+cloak shim install psql
+export PATH="$(cloak shim dir):$PATH"   # add to your shell profile to persist
+```
+
+Enroll a Context through the shim's `cloak` Control Prefix, select it, then use the CLI
+normally:
+
+```bash
+psql cloak context add production --host db.example.com --username app --password secret --default-database analytics
+psql cloak context switch production
+psql                # connects to production with the enrolled credentials
+```
+
+Cloak prints a short stderr Invocation Notice for every call (activated, passed through,
+or failed). Run `cloak doctor` anytime to check your installation, PATH ordering, and
+state.
+
 ## Testing
 
 Run the default test suite:
@@ -81,6 +133,13 @@ V1 uses atomic JSON writes but no lock files. This prevents half-written files a
 If `config.json` or `state.json` is corrupt, shims fail loudly instead of passing through silently.
 
 `cloak doctor` may touch the OS keyring while checking Secret Material references and keyring availability.
+
+## Versioning
+
+Cloak follows [Semantic Versioning](https://semver.org). Releases are git tags of the
+form `vX.Y.Z`. While on `0.x`, the CLI surface and on-disk formats may still change
+between minor versions. `cloak --version` (or `cloak version`) reports the version,
+commit, and build date.
 
 ## License
 

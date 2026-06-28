@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"cloak/internal/contextstore"
-	"cloak/internal/secrets"
-	"cloak/internal/shim"
+	"github.com/lakisyaman/cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/secrets"
+	"github.com/lakisyaman/cloak/internal/shim"
 
 	"github.com/zalando/go-keyring"
 )
@@ -302,6 +302,22 @@ func checkInstalledShims(options Options) []Finding {
 	}
 
 	return findings
+}
+
+// ShimDirOnPathAhead reports whether shimDir appears in pathEnv ahead of the
+// directory containing realPath, i.e. whether an installed shim would take
+// precedence over the Real Command. It returns false when either directory is
+// absent from pathEnv.
+func ShimDirOnPathAhead(shimDir, realPath, pathEnv string) bool {
+	shimIndex := pathIndex(pathEnv, shimDir)
+	if shimIndex == -1 {
+		return false
+	}
+	realIndex := pathIndex(pathEnv, filepath.Dir(realPath))
+	if realIndex == -1 {
+		return false
+	}
+	return shimIndex <= realIndex
 }
 
 func checkPathOrdering(shimDir, realPath, pathEnv, name string) Finding {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
 func TestPSQLActivationInjectsDefaultDatabaseForCommandFlag(t *testing.T) {

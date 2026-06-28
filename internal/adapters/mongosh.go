@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
 type MongoSH struct{}

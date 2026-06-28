@@ -3,11 +3,11 @@ package app
 import (
 	"os"
 
-	"cloak/internal/adapters"
-	"cloak/internal/contextstore"
-	"cloak/internal/doctor"
-	"cloak/internal/secrets"
-	"cloak/internal/shim"
+	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/doctor"
+	"github.com/lakisyaman/cloak/internal/secrets"
+	"github.com/lakisyaman/cloak/internal/shim"
 )
 
 type ContextStore interface {

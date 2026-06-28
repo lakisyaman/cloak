@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"cloak/internal/adapters"
-	"cloak/internal/doctor"
+	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/doctor"
 
 	"github.com/spf13/cobra"
 )
@@ -17,6 +17,7 @@ func newShimCommand(env CommandEnv) *cobra.Command {
 	cmd.AddCommand(newShimInstallCommand(env))
 	cmd.AddCommand(newShimUninstallCommand(env))
 	cmd.AddCommand(newShimListCommand(env))
+	cmd.AddCommand(newShimDirCommand(env))
 	return cmd
 }
 
@@ -30,7 +31,8 @@ func newShimInstallCommand(env CommandEnv) *cobra.Command {
 			if err := validateManagedCLI(managedCLI); err != nil {
 				return err
 			}
-			if _, err := env.Resolver.Resolve(managedCLI); err != nil {
+			realPath, err := env.Resolver.Resolve(managedCLI)
+			if err != nil {
 				return fmt.Errorf("real command %s not found; install it first: %w", managedCLI, err)
 			}
 			if err := os.MkdirAll(env.Paths.ShimDir, 0o700); err != nil {
@@ -42,6 +44,9 @@ func newShimInstallCommand(env CommandEnv) *cobra.Command {
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "installed shim %s -> %s\n", shimPath, env.CloakBinaryPath)
 			printDoctorFindings(cmd, env)
+			if !doctor.ShimDirOnPathAhead(env.Paths.ShimDir, realPath, env.PathEnv) {
+				printShimPathHint(cmd, env.Paths.ShimDir, managedCLI)
+			}
 			return nil
 		},
 	}
@@ -99,6 +104,26 @@ func newShimListCommand(env CommandEnv) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newShimDirCommand(env CommandEnv) *cobra.Command {
+	return &cobra.Command{
+		Use:   "dir",
+		Short: "Print the Cloak shim directory",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Fprintln(cmd.OutOrStdout(), env.Paths.ShimDir)
+			return nil
+		},
+	}
+}
+
+func printShimPathHint(cmd *cobra.Command, shimDir, managedCLI string) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "\nThe shim directory is not ahead of the real %s on your PATH, so the shim\n", managedCLI)
+	fmt.Fprint(out, "will not take effect yet. Add it ahead of your system paths:\n\n")
+	fmt.Fprintf(out, "    export PATH=\"%s:$PATH\"\n\n", shimDir)
+	fmt.Fprint(out, "Add that line to your shell profile (e.g. ~/.zshrc) to make it permanent.\n")
 }
 
 func replaceSymlink(target, link string) error {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
 func TestDoctorCommandPrintsFindings(t *testing.T) {

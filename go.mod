@@ -1,4 +1,4 @@
-module cloak
+module github.com/lakisyaman/cloak
 
 go 1.26
 

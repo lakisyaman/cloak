@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"cloak/internal/adapters"
-	"cloak/internal/contextstore"
-	"cloak/internal/secrets"
+	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/contextstore"
+	"github.com/lakisyaman/cloak/internal/secrets"
 
 	"github.com/spf13/cobra"
 )

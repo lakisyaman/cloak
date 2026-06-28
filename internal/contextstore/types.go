@@ -1,6 +1,6 @@
 package contextstore
 
-import "cloak/internal/secrets"
+import "github.com/lakisyaman/cloak/internal/secrets"
 
 const Version = 1
 

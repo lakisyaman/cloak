@@ -15,7 +15,7 @@ func NewShimControlCommandWithEnv(version, managedCLI string, env CommandEnv) *c
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.Version = version
+	applyVersion(root, version)
 
 	control := &cobra.Command{Use: "cloak", Short: "Manage Cloak Contexts for " + managedCLI}
 	control.AddCommand(newShimScopedContextCommand(env, managedCLI))
