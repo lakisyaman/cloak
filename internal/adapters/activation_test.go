@@ -37,6 +37,43 @@ func TestPSQLActivationSuppressesDefaultDatabaseForTruePositionalDatabase(t *tes
 	}
 }
 
+func TestPSQLActivationDatabaseScopeAcrossFlagForms(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		wantInject bool // whether the Context's default database should be injected
+	}{
+		{"separate -c", []string{"-c", "select 1"}, true},
+		{"all separate -A -t -c", []string{"-A", "-t", "-c", "select 1"}, true},
+		{"bundled -tAc", []string{"-tAc", "select 1"}, true},
+		{"bundled -Atc", []string{"-Atc", "select 1"}, true},
+		{"short flag attached value -cSELECT", []string{"-cselect 1"}, true},
+		{"long --command", []string{"--command", "select 1"}, true},
+		{"long --command=value", []string{"--command=select 1"}, true},
+		{"bundled -f file", []string{"-tAf", "/tmp/query.sql"}, true},
+		{"positional database", []string{"analytics"}, false},
+		{"positional database before bundled flags", []string{"analytics", "-tAc", "select 1"}, false},
+		{"explicit -d dbname", []string{"-d", "analytics"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			activated, err := (PSQL{}).Activate(Invocation{Args: tc.args}, contextstore.Context{
+				Metadata: map[string]any{
+					"host":            "db.example.com",
+					"defaultDatabase": "defaultdb",
+				},
+			}, nil)
+			if err != nil {
+				t.Fatalf("activate psql: %v", err)
+			}
+			injected := strings.Contains(strings.Join(activated.Env, "\x00"), "PGDATABASE=defaultdb")
+			if injected != tc.wantInject {
+				t.Fatalf("args %v: PGDATABASE injected=%v, want %v (env=%#v)", tc.args, injected, tc.wantInject, activated.Env)
+			}
+		})
+	}
+}
+
 func TestPSQLActivationUsesEnvAndComposesTransportOption(t *testing.T) {
 	adapter := PSQL{}
 	if adapter.DetectExplicitConnectionInput(nil, []string{"PGSSLMODE=require"}) {

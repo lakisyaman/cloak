@@ -45,7 +45,7 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 		if err := app.ExecuteInvocationWithOptions(app.InvocationOptions{
 			Version:  "test",
 			Argv0:    shimPath,
-			Args:     []string{"-At", "-c", "select current_database()"},
+			Args:     []string{"-Atc", "select current_database()"},
 			Stderr:   &stderr,
 			Resolver: env.Resolver,
 			Delegate: delegate,

@@ -58,49 +58,57 @@ func psqlHasDatabaseScope(args []string, env []string) bool {
 	}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if psqlFlagConsumesNextValue(arg) && !strings.Contains(arg, "=") {
-			i++
+		switch {
+		case arg == "--":
+			// Remaining tokens are operands; the first is the database name.
+			return i+1 < len(args)
+		case arg == "-":
+			// Lone "-" is psql's stdin marker, not a database name.
 			continue
-		}
-		if strings.HasPrefix(arg, "-") {
+		case strings.HasPrefix(arg, "-"):
+			if psqlFlagConsumesNextValue(arg) {
+				i++
+			}
 			continue
-		}
-		return true
-	}
-	return false
-}
-
-func psqlFlagConsumesNextValue(arg string) bool {
-	switch arg {
-	case "-c", "--command",
-		"-f", "--file",
-		"-v", "--set", "--variable",
-		"-o", "--output",
-		"-F", "--field-separator",
-		"-P", "--pset",
-		"-R", "--record-separator",
-		"-T", "--table-attr",
-		"-L", "--log-file":
-		return true
-	}
-	for _, prefix := range []string{
-		"--command=",
-		"--file=",
-		"--set=",
-		"--variable=",
-		"--output=",
-		"--field-separator=",
-		"--pset=",
-		"--record-separator=",
-		"--table-attr=",
-		"--log-file=",
-	} {
-		if strings.HasPrefix(arg, prefix) {
+		default:
+			// A bare token is a positional database name (Scope Selection).
 			return true
 		}
 	}
 	return false
 }
+
+// psqlFlagConsumesNextValue reports whether arg is a psql option whose value is
+// the following argument. It understands long options (--command), long options
+// with an attached value (--command=...), and short-option bundles where a
+// value-taking flag is the last letter (e.g. -c, -tAc). A value-taking short
+// flag that is not last carries its value attached (e.g. -cSELECT) and consumes
+// no following argument.
+func psqlFlagConsumesNextValue(arg string) bool {
+	if strings.HasPrefix(arg, "--") {
+		if strings.Contains(arg, "=") {
+			return false
+		}
+		switch arg {
+		case "--command", "--dbname", "--file", "--field-separator",
+			"--host", "--log-file", "--output", "--port", "--pset",
+			"--record-separator", "--set", "--table-attr", "--username",
+			"--variable":
+			return true
+		}
+		return false
+	}
+	body := strings.TrimPrefix(arg, "-")
+	for i := 0; i < len(body); i++ {
+		if strings.IndexByte(psqlValueShortFlags, body[i]) >= 0 {
+			return i == len(body)-1
+		}
+	}
+	return false
+}
+
+// psqlValueShortFlags are psql's value-taking short options.
+const psqlValueShortFlags = "FLPRTUcdfhopv"
 
 func isPostgresConnectionURI(value string) bool {
 	return strings.HasPrefix(value, "postgres://") || strings.HasPrefix(value, "postgresql://")
