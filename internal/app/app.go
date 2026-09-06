@@ -41,6 +41,7 @@ func NewRootCommandWithEnv(version string, env CommandEnv) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 
 	root.AddCommand(newVersionCommand(version))
+	root.AddCommand(newInitCommand(env))
 	root.AddCommand(newShimCommand(env))
 	root.AddCommand(newConnectorCommand(env))
 	root.AddCommand(newDoctorCommand(env))

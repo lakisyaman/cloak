@@ -75,7 +75,7 @@ func ValidateCommand(name string) error {
 		return fmt.Errorf("invalid Managed CLI name")
 	}
 	switch name {
-	case "cloak", "connector", "context", "shim", "doctor", "version", "help", "completion":
+	case "cloak", "connector", "context", "shim", "doctor", "version", "help", "completion", "init":
 		return fmt.Errorf("Managed CLI name %s is reserved", name)
 	}
 	return nil

@@ -40,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/lakisyaman/cloak/main/install.sh | 
 This downloads the prebuilt binary for your OS/architecture from the latest
 [GitHub release](https://github.com/lakisyaman/cloak/releases), verifies its checksum,
 and installs it to `~/.local/bin` (override with `CLOAK_INSTALL_DIR`). Install a specific
-version with `... | sh -s -- v0.1.0`.
+version with `... | sh -s -- v0.3.0`.
 
 ### Prebuilt binaries
 
@@ -95,6 +95,32 @@ cloak redis-cli context show production
 ```
 
 Secret field flags are available for non-interactive configuration, but their command-line values can appear in shell history or process listings. The interactive wizard avoids echoing them. Configuration does not select a Context; use `switch` separately.
+
+## Set up coding agents
+
+Add Cloak usage guidance to your agent's instruction files:
+
+```bash
+cloak init                       # Update recognized files in the current directory
+cloak init --global              # Update existing user-level instruction files
+cloak init --agent claude        # Target Claude; create its file if missing
+cloak init --global --agent codex,gemini
+```
+
+`init` discovers and updates all existing files in the selected scope:
+
+| Agent (`--agent`) | Current directory | User-level (`--global`) |
+| --- | --- | --- |
+| Codex (`codex`) | `AGENTS.md` | `$CODEX_HOME/AGENTS.md`, default `~/.codex/AGENTS.md` |
+| Claude Code (`claude`) | `CLAUDE.md`, `.claude/CLAUDE.md` | `$CLAUDE_CONFIG_DIR/CLAUDE.md`, default `~/.claude/CLAUDE.md` |
+| Gemini CLI (`gemini`) | `GEMINI.md` | `~/.gemini/GEMINI.md` |
+| GitHub Copilot CLI (`copilot`) | `.github/copilot-instructions.md` | `~/.copilot/copilot-instructions.md` |
+
+If no recognized file exists, an interactive terminal prompts for an agent. In scripts, pass `--agent`; it accepts comma-separated names or repeated flags. Explicit targeting updates that agent's existing files, or creates the first listed path when missing. Current-directory discovery stays at the listed paths, without searching parent directories or nested projects.
+
+Cloak maintains one marked section, preserving surrounding instructions and existing file permissions. Rerun `init` after upgrading Cloak to refresh the guidance; unchanged files are left untouched. Incomplete or duplicate Cloak markers cause an error before any files are written. Symlinks are preserved and shared targets are updated once; current-directory setup rejects links that resolve outside that directory.
+
+The guidance teaches Connector discovery and registry installation, Context inspection and switching, native CLI usage through Shims, configuration, and `--help` navigation. The local/global choice controls where instructions are written; Active Context selection remains user-global. Init does not install Connectors or configure Contexts.
 
 ## Connector lifecycle
 
@@ -180,4 +206,4 @@ Read these before implementation:
 
 ## Status
 
-Dynamic YAML Connectors, on-demand acquisition, explicit Context Configuration, and generic Activation are implemented. Registry files are ordinary repository files; publishing changes there enables on-demand downloads without bundling definitions in a binary release. The test suite includes shared-engine coverage and Testcontainers scenarios for PostgreSQL, Redis, and MongoDB.
+Dynamic YAML Connectors, on-demand acquisition, explicit Context Configuration, generic Activation, and local/global agent instruction setup are implemented. Registry files are ordinary repository files; publishing changes there enables on-demand downloads without bundling definitions in a binary release. The test suite includes shared-engine coverage and Testcontainers scenarios for PostgreSQL, Redis, and MongoDB.

@@ -231,6 +231,7 @@ func TestSchemaRejectsInvalidDefinitions(t *testing.T) {
 		strings.Replace(customYAML, "version: 1", "version: 99", 1),
 		strings.Replace(customYAML, "command: acme-cli", "command: ../cloak", 1),
 		strings.Replace(customYAML, "command: acme-cli", "command: connector", 1),
+		strings.Replace(customYAML, "command: acme-cli", "command: init", 1),
 		strings.Replace(customYAML, "onInput: override", "onInput: conditional", 1),
 		strings.Replace(customYAML, "type: boolean", "type: executable", 1),
 		strings.Replace(customYAML, "inject: {flag: \"--insecure\"}", "inject: {flag: \"--insecure\", takesValue: false}", 1),

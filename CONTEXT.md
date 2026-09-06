@@ -73,7 +73,7 @@ A short stderr message explaining whether Cloak applied, skipped, or could not a
 _Avoid_: log, warning, banner
 
 **Cloak Command**:
-The command interface for managing Connectors, Shims, and Contexts and diagnosing their state.
+The command interface for managing Connectors, Shims, and Contexts, diagnosing their state, and setting up agent guidance for using Cloak.
 _Avoid_: managed CLI, shim
 
 **Shim**:
