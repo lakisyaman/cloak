@@ -3,10 +3,10 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/lakisyaman/cloak/main/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/lakisyaman/cloak/main/install.sh | sh -s -- v0.1.0
+#   curl -fsSL https://raw.githubusercontent.com/lakisyaman/cloak/main/install.sh | sh -s -- v0.3.0
 #
 # Environment:
-#   VERSION            release to install (default: latest), e.g. v0.1.0
+#   VERSION            release to install (default: latest), e.g. v0.3.0
 #   CLOAK_INSTALL_DIR  install directory (default: $HOME/.local/bin)
 #   CLOAK_BASE_URL     override the release download base URL (mirrors/testing)
 
@@ -114,9 +114,11 @@ esac
 cat <<EOF
 
 Next steps:
+  Install the native CLI separately (for example, psql for PostgreSQL).
   1. Add a Connector:    $BINARY connector add @cloak/psql
   2. Put shims on PATH:  export PATH="\$($BINARY shim dir):\$PATH"
   3. Configure Context:  $BINARY psql context configure production
   4. Switch and use:     $BINARY psql context switch production && psql
-  5. Diagnose anytime:   $BINARY doctor
+  5. Set up agents:      $BINARY init (or $BINARY init --global)
+  6. Diagnose anytime:   $BINARY doctor
 EOF
