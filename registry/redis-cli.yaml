@@ -1,0 +1,42 @@
+version: 1
+command: redis-cli
+description: Redis command-line client
+parsing:
+  stopAtFirstPositional: true
+  valueFlags: ["--sni", "--cacert", "--cacertdir", "--cert", "--key", "--ciphers", "--tls-ciphersuites", "-r", "-i", "-X", "-d", "-D", "--pipe-timeout", "--lru-test", "--pattern", "--quoted-pattern", "--count", "--intrinsic-latency", "--rdb", "--functions-rdb", "--memkeys-samples", "--eval"]
+passthrough:
+  flags: ["-u", "--uri", "-s"]
+fields:
+  host:
+    type: string
+    required: true
+    onInput: passthrough
+    input: {flags: ["-h", "--host"]}
+    inject: {flag: "-h"}
+  port:
+    type: integer
+    onInput: passthrough
+    input: {flags: ["-p", "--port"]}
+    inject: {flag: "-p"}
+  username:
+    type: string
+    onInput: passthrough
+    input: {flags: ["--user"], env: [REDISCLI_AUTH_USERNAME]}
+    inject: {flag: "--user"}
+  password:
+    type: string
+    secret: true
+    onInput: passthrough
+    input: {flags: ["-a", "--pass"], env: [REDISCLI_AUTH]}
+    inject: {flag: "-a"}
+  defaultDatabase:
+    type: string
+    configureFlag: default-database
+    onInput: override
+    input: {flags: ["-n", "--db"]}
+    inject: {flag: "-n"}
+  tls:
+    type: boolean
+    onInput: override
+    input: {flags: ["--tls"]}
+    inject: {flag: "--tls"}

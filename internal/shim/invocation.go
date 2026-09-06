@@ -24,7 +24,3 @@ func DetectInvocation(argv0 string) Invocation {
 	}
 	return Invocation{Mode: ShimMode, Name: name, ManagedCLI: name}
 }
-
-func IsControlPrefix(args []string) bool {
-	return len(args) > 0 && args[0] == StandaloneName
-}

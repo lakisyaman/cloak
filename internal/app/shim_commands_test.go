@@ -36,6 +36,7 @@ func TestShimInstallListAndUninstall(t *testing.T) {
 	}
 	env := CommandEnv{
 		Paths:           paths,
+		Connectors:      testConnectorStore(t),
 		Store:           store,
 		Secrets:         fakeSecretStore{},
 		Resolver:        fakeResolver{path: filepath.Join(realDir, "psql")},
@@ -168,6 +169,7 @@ func newShimInstallTestEnv(t *testing.T) (CommandEnv, string, string) {
 	}
 	return CommandEnv{
 		Paths:           paths,
+		Connectors:      testConnectorStore(t),
 		Store:           store,
 		Secrets:         fakeSecretStore{},
 		Resolver:        fakeResolver{path: filepath.Join(realDir, "psql")},

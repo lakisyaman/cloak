@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lakisyaman/cloak/internal/app"
+	"github.com/lakisyaman/cloak/internal/connectors"
 	"github.com/lakisyaman/cloak/internal/contextstore"
 	"github.com/lakisyaman/cloak/internal/secrets"
 	"github.com/lakisyaman/cloak/internal/shim"
@@ -31,18 +32,19 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 	t.Run("psql", func(t *testing.T) {
 		pg := StartPostgres(t, ctx)
 		env, shimPath := newCloakIntegrationEnv(t, "psql")
-		runShimControl(t, env, "psql", "context", "add", "production",
+		runContextCommand(t, env, "psql", "context", "configure", "production",
 			"--host", "localhost",
 			"--port", "5432",
 			"--username", pg.Username,
 			"--password", pg.Password,
 			"--default-database", pg.Database,
 		)
-		runShimControl(t, env, "psql", "context", "switch", "production")
+		runContextCommand(t, env, "psql", "context", "switch", "production")
 
 		delegate := &containerDelegate{t: t, ctx: ctx, container: pg.Container}
 		var stderr bytes.Buffer
 		if err := app.ExecuteInvocationWithOptions(app.InvocationOptions{
+			Paths:    env.Paths,
 			Version:  "test",
 			Argv0:    shimPath,
 			Args:     []string{"-Atc", "select current_database()"},
@@ -66,18 +68,19 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 	t.Run("redis-cli", func(t *testing.T) {
 		redis := StartRedis(t, ctx)
 		env, shimPath := newCloakIntegrationEnv(t, "redis-cli")
-		runShimControl(t, env, "redis-cli", "context", "add", "production",
+		runContextCommand(t, env, "redis-cli", "context", "configure", "production",
 			"--host", "localhost",
 			"--port", "6379",
 			"--username", redis.Username,
 			"--password", redis.Password,
 			"--default-database", "2",
 		)
-		runShimControl(t, env, "redis-cli", "context", "switch", "production")
+		runContextCommand(t, env, "redis-cli", "context", "switch", "production")
 
 		delegate := &containerDelegate{t: t, ctx: ctx, container: redis.Container}
 		var stderr bytes.Buffer
 		if err := app.ExecuteInvocationWithOptions(app.InvocationOptions{
+			Paths:    env.Paths,
 			Version:  "test",
 			Argv0:    shimPath,
 			Args:     []string{"SET", "cloak:e2e", "ok"},
@@ -103,13 +106,13 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 	t.Run("mongosh", func(t *testing.T) {
 		mongo := StartMongo(t, ctx)
 		env, shimPath := newCloakIntegrationEnv(t, "mongosh")
-		runShimControl(t, env, "mongosh", "context", "add", "production",
+		runContextCommand(t, env, "mongosh", "context", "configure", "production",
 			"--uri", "mongodb://localhost:27017?authSource=admin",
 			"--username", mongo.Username,
 			"--password", mongo.Password,
 			"--default-database", "cloak_test",
 		)
-		runShimControl(t, env, "mongosh", "context", "switch", "production")
+		runContextCommand(t, env, "mongosh", "context", "switch", "production")
 
 		delegate := &containerDelegate{t: t, ctx: ctx, container: mongo.Container}
 		var stderr bytes.Buffer
@@ -117,6 +120,7 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 		deadline := time.Now().Add(45 * time.Second)
 		for time.Now().Before(deadline) {
 			lastErr = app.ExecuteInvocationWithOptions(app.InvocationOptions{
+				Paths:    env.Paths,
 				Version:  "test",
 				Argv0:    shimPath,
 				Args:     []string{"--quiet", "--eval", "db.getName()"},
@@ -228,6 +232,7 @@ func newCloakIntegrationEnv(t *testing.T, managedCLI string) (app.CommandEnv, st
 	store := integrationFileStore{configPath: paths.ConfigFile, statePath: paths.StateFile}
 	env := app.CommandEnv{
 		Paths:           paths,
+		Connectors:      &connectors.Store{Dir: filepath.Join(dir, "connectors")},
 		Store:           store,
 		Secrets:         integrationSecretStore{values: map[string]string{}},
 		Resolver:        shim.RealCommandResolver{PathEnv: shimDir + string(os.PathListSeparator) + realDir, CloakBinaryPath: cloakBinary},
@@ -237,20 +242,20 @@ func newCloakIntegrationEnv(t *testing.T, managedCLI string) (app.CommandEnv, st
 
 	var output bytes.Buffer
 	cmd := app.NewRootCommandWithEnv("test", env)
-	cmd.SetArgs([]string{"shim", "install", managedCLI})
+	cmd.SetArgs([]string{"connector", "add", filepath.Join("..", "..", "registry", managedCLI+".yaml")})
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("install shim for %s: %v", managedCLI, err)
+		t.Fatalf("install Connector for %s: %v", managedCLI, err)
 	}
 	return env, filepath.Join(shimDir, managedCLI)
 }
 
-func runShimControl(t *testing.T, env app.CommandEnv, managedCLI string, args ...string) {
+func runContextCommand(t *testing.T, env app.CommandEnv, managedCLI string, args ...string) {
 	t.Helper()
 	var output bytes.Buffer
-	cmd := app.NewShimControlCommandWithEnv("test", managedCLI, env)
-	cmd.SetArgs(append([]string{"cloak"}, args...))
+	cmd := app.NewRootCommandWithEnv("test", env)
+	cmd.SetArgs(append([]string{managedCLI}, args...))
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 	if err := cmd.Execute(); err != nil {

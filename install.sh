@@ -114,9 +114,9 @@ esac
 cat <<EOF
 
 Next steps:
-  1. Install a shim:     $BINARY shim install psql
+  1. Add a Connector:    $BINARY connector add @cloak/psql
   2. Put shims on PATH:  export PATH="\$($BINARY shim dir):\$PATH"
-  3. Enroll a context:   psql cloak context add production --host ... --username ... --password ...
-  4. Switch and use:     psql cloak context switch production && psql
+  3. Configure Context:  $BINARY psql context configure production
+  4. Switch and use:     $BINARY psql context switch production && psql
   5. Diagnose anytime:   $BINARY doctor
 EOF

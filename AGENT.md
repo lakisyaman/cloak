@@ -6,6 +6,8 @@ This project is architecture-first. Before making implementation changes, read:
 2. `docs/architecture.md`
 3. all files in `docs/adr/`
 
+The Connector architecture is recorded in ADR 0020 and ADR 0021. Use declarative YAML Connectors with a generic runtime; no CLI-specific Go implementations or bundled definitions. Context management uses `cloak <cli> context ...`; Shims have no Control Prefix.
+
 ## Project language
 
 Use the glossary in `CONTEXT.md` exactly. In particular:
@@ -28,7 +30,7 @@ Do not introduce these in v1 unless an ADR is added first:
 
 - project-local Active Contexts
 - arbitrary/unregistered CLIs
-- plugin/declarative Adapters
+- executable Connector hooks or scripts
 - one-shot context selection
 - Windows-specific shim behavior
 - disk logging
@@ -69,7 +71,7 @@ Run the default test suite before finishing code changes:
 go test ./...
 ```
 
-Run Testcontainers-backed integration tests when changing Adapter Activation, Context Enrollment, or end-to-end CLI behavior:
+Run Testcontainers-backed integration tests when changing Connector Activation, Context Configuration, or end-to-end CLI behavior:
 
 ```bash
 go test -tags=integration ./test/integration -count=1 -v
@@ -77,15 +79,11 @@ go test -tags=integration ./test/integration -count=1 -v
 
 Integration tests may skip if Docker/Testcontainers is unavailable.
 
-## V1 Managed CLIs
+## Connector definitions
 
-Only these Managed CLIs are supported in v1:
+Fresh installations contain zero Connectors. The repository registry initially contains `mongosh`, `psql`, and `redis-cli`; adding supported definitions is expected and does not require a new Go implementation. Registry downloads use `@cloak/<cli>`; local sources use YAML paths. Execution uses only the installed snapshot, refreshed explicitly.
 
-- `mongosh`
-- `psql`
-- `redis-cli`
-
-Unknown Managed CLI names should be rejected by commands and reported by `cloak doctor` if present in config/state.
+Connector add/update must not configure or validate Context values. Invalid Contexts fail closed at Activation and point to explicit configuration. Connector removal preserves Contexts and secrets; Context removal is separate. Retained Contexts without a Connector remain manageable and are reported by doctor.
 
 ## Before adding an ADR
 

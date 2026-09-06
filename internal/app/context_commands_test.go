@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lakisyaman/cloak/internal/adapters"
 	"github.com/lakisyaman/cloak/internal/contextstore"
 )
 
@@ -33,34 +32,34 @@ func TestContextAddSwitchShowAndActivationThroughCLI(t *testing.T) {
 	store := newMutableContextStore()
 	secretStore := fakeSecretStore{values: map[string]string{}}
 	env := CommandEnv{
-		Store:    store,
-		Secrets:  secretStore,
-		Resolver: fakeResolver{path: "/real/psql"},
-		Adapters: adapterRegistryFunc(adapters.Get),
+		Store:      store,
+		Secrets:    secretStore,
+		Resolver:   fakeResolver{path: "/real/psql"},
+		Connectors: testConnectorStore(t),
 	}
 
 	var addOut bytes.Buffer
-	addCmd := NewShimControlCommandWithEnv("test", "psql", env)
-	addCmd.SetArgs([]string{"cloak", "context", "add", "production", "--host", "db.example.com", "--username", "app", "--password", "secret", "--default-database", "appdb"})
+	addCmd := NewRootCommandWithEnv("test", env)
+	addCmd.SetArgs([]string{"psql", "context", "configure", "production", "--host", "db.example.com", "--username", "app", "--password", "secret", "--default-database", "appdb"})
 	addCmd.SetOut(&addOut)
 	if err := addCmd.Execute(); err != nil {
 		t.Fatalf("context add: %v", err)
 	}
-	if !strings.Contains(addOut.String(), "added context production for psql") {
+	if !strings.Contains(addOut.String(), "configured context production for psql") {
 		t.Fatalf("unexpected add output: %q", addOut.String())
 	}
 
 	var switchOut bytes.Buffer
-	switchCmd := NewShimControlCommandWithEnv("test", "psql", env)
-	switchCmd.SetArgs([]string{"cloak", "context", "switch", "production"})
+	switchCmd := NewRootCommandWithEnv("test", env)
+	switchCmd.SetArgs([]string{"psql", "context", "switch", "production"})
 	switchCmd.SetOut(&switchOut)
 	if err := switchCmd.Execute(); err != nil {
 		t.Fatalf("context switch: %v", err)
 	}
 
 	var showOut bytes.Buffer
-	showCmd := NewShimControlCommandWithEnv("test", "psql", env)
-	showCmd.SetArgs([]string{"cloak", "context", "show", "production"})
+	showCmd := NewRootCommandWithEnv("test", env)
+	showCmd.SetArgs([]string{"psql", "context", "show", "production"})
 	showCmd.SetOut(&showOut)
 	if err := showCmd.Execute(); err != nil {
 		t.Fatalf("context show: %v", err)
@@ -72,16 +71,16 @@ func TestContextAddSwitchShowAndActivationThroughCLI(t *testing.T) {
 	var stderr bytes.Buffer
 	delegate := &recordingDelegate{}
 	if err := ExecuteInvocationWithOptions(InvocationOptions{
-		Version:  "test",
-		Argv0:    "/tmp/shims/psql",
-		Args:     []string{"-c", "select 1"},
-		Stderr:   &stderr,
-		Resolver: fakeResolver{path: "/real/psql"},
-		Delegate: delegate,
-		Store:    store,
-		Adapters: adapterRegistryFunc(adapters.Get),
-		Secrets:  secretStore,
-		Env:      []string{},
+		Version:    "test",
+		Argv0:      "/tmp/shims/psql",
+		Args:       []string{"-c", "select 1"},
+		Stderr:     &stderr,
+		Resolver:   fakeResolver{path: "/real/psql"},
+		Delegate:   delegate,
+		Store:      store,
+		Connectors: env.Connectors,
+		Secrets:    secretStore,
+		Env:        []string{},
 	}); err != nil {
 		t.Fatalf("execute activated psql: %v", err)
 	}

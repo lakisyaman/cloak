@@ -17,38 +17,17 @@ Other CLIs require connection details or credentials repeatedly, which is awkwar
 
 ## Approach
 
-Cloak installs PATH-based shims for supported CLIs.
-
-Example:
+Cloak installs PATH-based Shims using declarative YAML Connectors. The binary ships with zero Connector definitions. Install a definition from the repository registry or a local file, configure and select a Context, then use the native CLI normally.
 
 ```bash
-mongosh cloak context add production --uri "mongodb+srv://cluster.example.com" --username app --password secret
-mongosh cloak context switch production
-mongosh
-```
-
-After a Context is selected, ordinary CLI invocations are activated with that Context:
-
-```bash
-psql cloak context switch production
+cloak connector add @cloak/psql
+export PATH="$(cloak shim dir):$PATH"
+cloak psql context configure production
+cloak psql context switch production
 psql analytics
 ```
 
-Cloak preserves the original command shape while adding Context management.
-
-## V1 scope
-
-V1 targets macOS and Linux and supports these Managed CLIs:
-
-- `mongosh`
-- `psql`
-- `redis-cli`
-
-Cloak is implemented in Go with:
-
-- Cobra for command parsing.
-- `github.com/zalando/go-keyring` for OS secret storage.
-- symlink shims pointing to the `cloak` binary.
+The repository includes optional definitions for `mongosh`, `psql`, and `redis-cli`. More CLIs can be enabled by adding YAML definitions that use the shared runtime's capabilities. Cloak targets macOS and Linux, uses Cobra for management commands, and stores Secret Material in the OS keyring.
 
 ## Installation
 
@@ -81,26 +60,67 @@ Planned for a future release.
 
 ## Quickstart
 
-Install a shim for a Managed CLI, then put the shim directory ahead of the real CLI on
-your `PATH` — this is what makes the shim take effect:
+Install the native CLI, then acquire its Connector and put Cloak's Shim directory ahead of it on PATH:
 
 ```bash
-cloak shim install psql
-export PATH="$(cloak shim dir):$PATH"   # add to your shell profile to persist
+cloak connector add @cloak/redis-cli
+export PATH="$(cloak shim dir):$PATH"   # persist in your shell profile
 ```
 
-Enroll a Context through the shim's `cloak` Control Prefix, select it, then use the CLI
-normally:
+For development, build from a source checkout and use its local registry definitions:
 
 ```bash
-psql cloak context add production --host db.example.com --username app --password secret --default-database analytics
-psql cloak context switch production
-psql                # connects to production with the enrolled credentials
+go build -o bin/cloak ./cmd/cloak
+./bin/cloak connector add ./registry/redis-cli.yaml
+export PATH="$(./bin/cloak shim dir):$PATH"
 ```
 
-Cloak prints a short stderr Invocation Notice for every call (activated, passed through,
-or failed). Run `cloak doctor` anytime to check your installation, PATH ordering, and
-state.
+Configure values explicitly. In a terminal, this starts a wizard with masked secret entry:
+
+```bash
+cloak redis-cli context configure production
+cloak redis-cli context switch production
+redis-cli PING
+```
+
+For scripts, pass the required fields; optional fields can also be supplied. Existing values are retained unless replaced or cleared:
+
+```bash
+cloak redis-cli context configure production --host redis.example.com --port 6379 --default-database 2 --tls
+cloak redis-cli context configure production --tls=false
+cloak redis-cli context configure production --clear default-database
+cloak redis-cli context list
+cloak redis-cli context current
+cloak redis-cli context show production
+```
+
+Secret field flags are available for non-interactive configuration, but their command-line values can appear in shell history or process listings. The interactive wizard avoids echoing them. Configuration does not select a Context; use `switch` separately.
+
+## Connector lifecycle
+
+```bash
+cloak connector add ./my-client.yaml
+cloak connector list
+cloak connector update redis-cli
+cloak connector update redis-cli --source @cloak/redis-cli
+cloak connector remove redis-cli
+```
+
+Both local and registry definitions are copied into Cloak's internal directory. Execution uses that copy without reading the source or accessing the network. Source edits take effect only after an explicit update. Remote sources currently support only `@cloak/<cli>`; local sources must be `.yaml` or `.yml` files.
+
+Connector add/update never requires Context values or changes saved Contexts. If an updated definition needs missing values, the next Activation fails with `cloak <cli> context configure <name>` guidance. Normal CLI invocations never open a wizard.
+
+Connector removal deletes its definition and Shim but keeps Contexts and Secret Material. Reinstall to reuse them, or explicitly delete a Context with `cloak <cli> context remove <name>`.
+
+Known connection inputs skip the whole Context; database and transport inputs can override individual fields. For example, `psql -d analytics` keeps the configured connection and selects the caller's database. Unknown native options are forwarded. See the [schema](./docs/connector-schema.md) for the declarative behavior and parser limitations.
+
+Cloak prints a short stderr Invocation Notice when applying, skipping, or failing Activation. Run `cloak doctor` to check installation, PATH ordering, and state. `cloak shim dir/list/install/uninstall` remain available for troubleshooting.
+
+## Upgrading from built-in Adapters
+
+Add the definitions explicitly; upgrades do not download them automatically. Replace commands such as `psql cloak context switch production` with `cloak psql context switch production`. The former Control Prefix now passes to the native CLI.
+
+Existing psql and Redis Context files and secret references remain usable. The MongoDB definition classifies its full URI as Secret Material, including embedded credentials. Reconfigure an older MongoDB Context with `cloak mongosh context configure <name> --uri ...` (or use the wizard) to store that URI in the keyring. Until then, Activation fails closed with configuration guidance.
 
 ## Testing
 
@@ -151,6 +171,8 @@ Read these before implementation:
 
 - [Domain language](./CONTEXT.md)
 - [Architecture](./docs/architecture.md)
+- [Connector schema](./docs/connector-schema.md)
+- [Repository registry](./registry/)
 - [Architecture Decision Records](./docs/adr/)
 - [Follow-ups](./docs/follow-ups.md)
 - [Candidate Managed CLIs](./docs/managed-cli-candidates.md)
@@ -158,8 +180,4 @@ Read these before implementation:
 
 ## Status
 
-V1 is functionally complete. Context management and ephemeral Activation are implemented end to end for all three v1 Managed CLIs (`mongosh`, `psql`, `redis-cli`): a Context can be enrolled through a Shim's `cloak` Control Prefix, selected as the Active Context, and applied to ordinary invocations, while the standalone `cloak` command handles `shim install/uninstall/list`, `context list/switch/remove/show`, and `doctor` for installation and state diagnostics.
-
-Coverage is real rather than scaffolding. The unit suite runs race-enabled, and the Testcontainers integration suite proves end-to-end Activation — installing a Shim, enrolling a Context, switching, and running the real client against a live Postgres, Redis, or MongoDB backend.
-
-No tagged release has been cut yet. See [Known v1 storage limitation](#known-v1-storage-limitation) above for the intentional v1 constraints.
+Dynamic YAML Connectors, on-demand acquisition, explicit Context Configuration, and generic Activation are implemented. Registry files are ordinary repository files; publishing changes there enables on-demand downloads without bundling definitions in a binary release. The test suite includes shared-engine coverage and Testcontainers scenarios for PostgreSQL, Redis, and MongoDB.

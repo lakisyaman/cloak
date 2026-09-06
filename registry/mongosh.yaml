@@ -1,0 +1,39 @@
+version: 1
+command: mongosh
+description: MongoDB shell
+parsing:
+  valueFlags: ["--eval", "--file", "--apiVersion", "--tlsCertificateKeyFilePassword", "--tlsCRLFile"]
+passthrough:
+  flags: ["--host", "--port", "--tlsCertificateKeyFile", "--tlsCAFile", "--tlsCertificateSelector"]
+fields:
+  uri:
+    type: string
+    required: true
+    secret: true
+    onInput: passthrough
+    input:
+      positionals: [{index: 0, prefixes: ["mongodb://", "mongodb+srv://"]}]
+    inject: {positional: true}
+    uri:
+      schemes: [mongodb, mongodb+srv]
+      defaultPathFrom: defaultDatabase
+  username:
+    type: string
+    onInput: passthrough
+    input: {flags: ["--username", "-u"]}
+    inject: {flag: "--username"}
+  password:
+    type: string
+    secret: true
+    onInput: passthrough
+    input: {flags: ["--password", "-p"]}
+    inject: {flag: "--password"}
+  authSource:
+    type: string
+    configureFlag: auth-source
+    onInput: passthrough
+    input: {flags: ["--authenticationDatabase"]}
+    inject: {flag: "--authenticationDatabase"}
+  defaultDatabase:
+    type: string
+    configureFlag: default-database

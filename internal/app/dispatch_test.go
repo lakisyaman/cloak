@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lakisyaman/cloak/internal/adapters"
+	"context"
+	"github.com/lakisyaman/cloak/internal/connectors"
 	"github.com/lakisyaman/cloak/internal/contextstore"
 	"github.com/lakisyaman/cloak/internal/secrets"
+	"path/filepath"
 )
 
 type fakeResolver struct {
@@ -55,30 +57,19 @@ func (repo memoryRepository) ReadState() (contextstore.State, error) {
 func (repo memoryRepository) WriteConfig(contextstore.Config) error { return nil }
 func (repo memoryRepository) WriteState(contextstore.State) error   { return nil }
 
-type fakeAdapterRegistry map[string]adapters.Adapter
-
-func (registry fakeAdapterRegistry) Get(managedCLI string) (adapters.Adapter, bool) {
-	adapter, ok := registry[managedCLI]
-	return adapter, ok
-}
-
-type fakeActivationAdapter struct {
-	name     string
-	explicit bool
-	err      error
-}
-
-func (adapter fakeActivationAdapter) Name() string { return adapter.name }
-func (adapter fakeActivationAdapter) DetectExplicitConnectionInput(args []string, env []string) bool {
-	return adapter.explicit
-}
-func (adapter fakeActivationAdapter) Activate(invocation adapters.Invocation, ctx contextstore.Context, secretValues map[string]string) (adapters.ActivatedInvocation, error) {
-	if adapter.err != nil {
-		return adapters.ActivatedInvocation{}, adapter.err
+func testConnectorStore(t *testing.T) *connectors.Store {
+	t.Helper()
+	store := &connectors.Store{Dir: t.TempDir()}
+	for _, name := range []string{"psql", "redis-cli", "mongosh"} {
+		record, _, err := store.Acquire(context.Background(), filepath.Join("..", "..", "registry", name+".yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = store.Write(record); err != nil {
+			t.Fatal(err)
+		}
 	}
-	activatedArgs := append([]string{"--activated", secretValues["password"]}, invocation.Args...)
-	activatedEnv := append(append([]string(nil), invocation.Env...), "ACTIVATED=1")
-	return adapters.ActivatedInvocation{Args: activatedArgs, Env: activatedEnv}, nil
+	return store
 }
 
 type fakeSecretStore struct {
@@ -126,22 +117,14 @@ func TestExecuteInvocationStandaloneRoutesToRootCommand(t *testing.T) {
 	}
 }
 
-func TestExecuteInvocationShimControlRoutesToShimCommand(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	err := ExecuteInvocationWithOptions(InvocationOptions{
-		Version: "test",
-		Argv0:   "/tmp/shims/psql",
-		Args:    []string{"cloak", "context", "list"},
-		Stdout:  &stdout,
-		Stderr:  &stderr,
-		Store:   memoryRepository{config: contextstore.EmptyConfig(), state: contextstore.EmptyState()},
-		Secrets: fakeSecretStore{},
-	})
+func TestOldControlPrefixDelegatesUnchanged(t *testing.T) {
+	delegate := &recordingDelegate{}
+	err := ExecuteInvocationWithOptions(InvocationOptions{Argv0: "/shims/psql", Args: []string{"cloak", "context", "list"}, Store: newMutableContextStore(), Resolver: fakeResolver{path: "/real/psql"}, Delegate: delegate})
 	if err != nil {
-		t.Fatalf("shim-scoped context list returned error: %v", err)
+		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "no contexts") {
-		t.Fatalf("expected shim context list output, got stdout=%q stderr=%q", stdout.String(), stderr.String())
+	if !delegate.called || strings.Join(delegate.argv, " ") != "/real/psql cloak context list" {
+		t.Fatalf("old prefix was intercepted: %#v", delegate)
 	}
 }
 
@@ -193,18 +176,18 @@ func TestExecuteInvocationActivatesActiveContext(t *testing.T) {
 			}},
 			state: contextstore.State{Version: contextstore.Version, ActiveContexts: map[string]string{"psql": "production"}},
 		},
-		Adapters: fakeAdapterRegistry{"psql": fakeActivationAdapter{name: "psql"}},
-		Secrets:  fakeSecretStore{values: map[string]string{secretRef.Service + "/" + secretRef.User: "secret"}},
-		Env:      []string{"A=B"},
+		Connectors: testConnectorStore(t),
+		Secrets:    fakeSecretStore{values: map[string]string{secretRef.Service + "/" + secretRef.User: "secret"}},
+		Env:        []string{"A=B"},
 	})
 	if err != nil {
 		t.Fatalf("ExecuteInvocation returned error: %v", err)
 	}
-	wantArgv := []string{"/real/psql", "--activated", "secret", "-c", "select 1"}
+	wantArgv := []string{"/real/psql", "-c", "select 1"}
 	if strings.Join(delegate.argv, "\x00") != strings.Join(wantArgv, "\x00") {
 		t.Fatalf("expected activated argv %#v, got %#v", wantArgv, delegate.argv)
 	}
-	if !contains(delegate.env, "ACTIVATED=1") {
+	if !contains(delegate.env, "PGPASSWORD=secret") {
 		t.Fatalf("expected activated env, got %#v", delegate.env)
 	}
 	if !strings.Contains(stderr.String(), "cloak: activated psql context production") {
@@ -226,9 +209,9 @@ func TestExecuteInvocationExplicitConnectionInputPassesThroughActiveContext(t *t
 			config: contextstore.EmptyConfig(),
 			state:  contextstore.State{Version: contextstore.Version, ActiveContexts: map[string]string{"psql": "production"}},
 		},
-		Adapters: fakeAdapterRegistry{"psql": fakeActivationAdapter{name: "psql", explicit: true}},
-		Secrets:  fakeSecretStore{},
-		Env:      []string{"A=B"},
+		Connectors: testConnectorStore(t),
+		Secrets:    fakeSecretStore{},
+		Env:        []string{"A=B"},
 	})
 	if err != nil {
 		t.Fatalf("ExecuteInvocation returned error: %v", err)
@@ -261,9 +244,9 @@ func TestExecuteInvocationMissingSecretFailsClosed(t *testing.T) {
 			}},
 			state: contextstore.State{Version: contextstore.Version, ActiveContexts: map[string]string{"psql": "production"}},
 		},
-		Adapters: fakeAdapterRegistry{"psql": fakeActivationAdapter{name: "psql"}},
-		Secrets:  fakeSecretStore{},
-		Env:      []string{"A=B"},
+		Connectors: testConnectorStore(t),
+		Secrets:    fakeSecretStore{},
+		Env:        []string{"A=B"},
 	})
 	if err == nil {
 		t.Fatalf("expected missing secret error")

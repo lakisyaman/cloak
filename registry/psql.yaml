@@ -1,0 +1,48 @@
+version: 1
+command: psql
+description: PostgreSQL interactive terminal
+parsing:
+  shortOptions: true
+  valueFlags: ["-F", "-L", "-P", "-R", "-T", "-c", "-f", "-o", "-v", "--command", "--file", "--field-separator", "--log-file", "--output", "--pset", "--record-separator", "--set", "--table-attr", "--variable"]
+passthrough:
+  env: [PGSERVICE, PGSERVICEFILE, PGPASSFILE, PGHOSTADDR]
+fields:
+  host:
+    type: string
+    required: true
+    onInput: passthrough
+    input: {flags: ["-h", "--host"], env: [PGHOST]}
+    inject: {env: PGHOST}
+  port:
+    type: integer
+    onInput: passthrough
+    input: {flags: ["-p", "--port"], env: [PGPORT]}
+    inject: {env: PGPORT}
+  username:
+    type: string
+    onInput: passthrough
+    input:
+      flags: ["-U", "--username"]
+      env: [PGUSER]
+      positionals: [{index: 1}]
+    inject: {env: PGUSER}
+  password:
+    type: string
+    secret: true
+    onInput: passthrough
+    input: {env: [PGPASSWORD]}
+    inject: {env: PGPASSWORD}
+  defaultDatabase:
+    type: string
+    configureFlag: default-database
+    onInput: override
+    input:
+      flags: ["-d", "--dbname"]
+      env: [PGDATABASE]
+      positionals: [{index: 0}]
+    inject: {env: PGDATABASE}
+  sslmode:
+    type: string
+    onInput: override
+    input: {env: [PGSSLMODE]}
+    inject: {env: PGSSLMODE}

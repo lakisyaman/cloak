@@ -50,8 +50,8 @@ func TestDoctorCommandPrintsFindings(t *testing.T) {
 }
 
 func TestRootCommandIncludesStandaloneContextShow(t *testing.T) {
-	root := NewRootCommand("test")
-	contextCmd, _, err := root.Find([]string{"context"})
+	root := NewRootCommandWithEnv("test", CommandEnv{Store: newMutableContextStore(), Connectors: testConnectorStore(t)})
+	contextCmd, _, err := root.Find([]string{"psql", "context"})
 	if err != nil {
 		t.Fatalf("find context command: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRootCommandIncludesStandaloneContextShow(t *testing.T) {
 		t.Fatalf("context command not found")
 	}
 
-	showCmd, _, err := root.Find([]string{"context", "show"})
+	showCmd, _, err := root.Find([]string{"psql", "context", "show"})
 	if err != nil {
 		t.Fatalf("find context show command: %v", err)
 	}

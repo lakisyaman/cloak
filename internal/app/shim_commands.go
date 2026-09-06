@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/connectors"
 	"github.com/lakisyaman/cloak/internal/doctor"
 
 	"github.com/spf13/cobra"
@@ -28,7 +28,7 @@ func newShimInstallCommand(env CommandEnv) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			managedCLI := args[0]
-			if err := validateManagedCLI(managedCLI); err != nil {
+			if _, err := env.Connectors.Get(managedCLI); err != nil {
 				return err
 			}
 			realPath, err := env.Resolver.Resolve(managedCLI)
@@ -38,12 +38,14 @@ func newShimInstallCommand(env CommandEnv) *cobra.Command {
 			if err := os.MkdirAll(env.Paths.ShimDir, 0o700); err != nil {
 				return err
 			}
+			if _, err := ownedShimTarget(env, managedCLI); err != nil {
+				return err
+			}
 			shimPath := filepath.Join(env.Paths.ShimDir, managedCLI)
 			if err := replaceSymlink(env.CloakBinaryPath, shimPath); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "installed shim %s -> %s\n", shimPath, env.CloakBinaryPath)
-			printDoctorFindings(cmd, env)
 			if !doctor.ShimDirOnPathAhead(env.Paths.ShimDir, realPath, env.PathEnv) {
 				printShimPathHint(cmd, env.Paths.ShimDir, managedCLI)
 			}
@@ -59,7 +61,10 @@ func newShimUninstallCommand(env CommandEnv) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			managedCLI := args[0]
-			if err := validateManagedCLI(managedCLI); err != nil {
+			if err := connectors.ValidateCommand(managedCLI); err != nil {
+				return err
+			}
+			if _, err := ownedShimTarget(env, managedCLI); err != nil {
 				return err
 			}
 			shimPath := filepath.Join(env.Paths.ShimDir, managedCLI)
@@ -67,7 +72,6 @@ func newShimUninstallCommand(env CommandEnv) *cobra.Command {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "uninstalled shim %s\n", shimPath)
-			printDoctorFindings(cmd, env)
 			return nil
 		},
 	}
@@ -89,7 +93,7 @@ func newShimListCommand(env CommandEnv) *cobra.Command {
 			}
 			var names []string
 			for _, entry := range entries {
-				if adapters.IsSupported(entry.Name()) {
+				if entry.Type()&os.ModeSymlink != 0 {
 					names = append(names, entry.Name())
 				}
 			}
@@ -138,10 +142,4 @@ func replaceSymlink(target, link string) error {
 		return err
 	}
 	return os.Symlink(target, link)
-}
-
-func printDoctorFindings(cmd *cobra.Command, env CommandEnv) {
-	for _, finding := range doctor.Run(doctorOptionsFromEnv(env)) {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", finding.Severity, finding.Message)
-	}
 }

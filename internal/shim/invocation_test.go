@@ -22,12 +22,3 @@ func TestDetectInvocation(t *testing.T) {
 		}
 	}
 }
-
-func TestIsControlPrefix(t *testing.T) {
-	if !IsControlPrefix([]string{"cloak", "context", "list"}) {
-		t.Fatalf("expected cloak first argument to be the Control Prefix")
-	}
-	if IsControlPrefix([]string{"context", "list"}) {
-		t.Fatalf("did not expect plain context to be the Control Prefix")
-	}
-}

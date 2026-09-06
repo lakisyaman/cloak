@@ -100,7 +100,9 @@ func Run(options Options) []Finding {
 	var findings []Finding
 
 	if len(options.SupportedNames) > 0 {
-		findings = append(findings, Finding{Severity: SeverityOK, Message: "supported Managed CLIs: " + strings.Join(options.SupportedNames, ", ")})
+		findings = append(findings, Finding{Severity: SeverityOK, Message: "installed Connectors: " + strings.Join(options.SupportedNames, ", ")})
+	} else {
+		findings = append(findings, Finding{Severity: SeverityOK, Message: "no Connectors installed"})
 	}
 
 	findings = append(findings, checkExistingWritableDir(options.Paths.Dir, "data directory"))
@@ -139,13 +141,13 @@ func CheckStateConsistency(config contextstore.Config, state contextstore.State,
 
 	for managedCLI := range config.ManagedCLIs {
 		if supported != nil && !supported.IsSupported(managedCLI) {
-			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("unknown Managed CLI in config: %s", managedCLI)})
+			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("retained Contexts without an available Connector: %s", managedCLI)})
 		}
 	}
 
 	for managedCLI, contextName := range state.ActiveContexts {
 		if supported != nil && !supported.IsSupported(managedCLI) {
-			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("unknown Managed CLI in state: %s", managedCLI)})
+			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("selected Context without an available Connector: %s", managedCLI)})
 		}
 
 		managedConfig, ok := config.ManagedCLIs[managedCLI]
@@ -212,7 +214,7 @@ func checkSecretStore(checker SecretChecker) Finding {
 		return Finding{Severity: SeverityWarning, Message: "secret store availability not checked"}
 	}
 	if err := checker.Available(); err != nil {
-		return Finding{Severity: SeverityError, Message: fmt.Sprintf("secret store unavailable: %v", err)}
+		return Finding{Severity: SeverityError, Message: "secret store unavailable"}
 	}
 	return Finding{Severity: SeverityOK, Message: "secret store available"}
 }
@@ -237,7 +239,7 @@ func checkSecretRefs(config contextstore.Config, checker SecretChecker) []Findin
 					continue
 				}
 				if err != nil {
-					findings = append(findings, Finding{Severity: SeverityError, Message: fmt.Sprintf("Secret Material for %s/%s/%s is unreadable: %v", managedCLI, contextName, field, err)})
+					findings = append(findings, Finding{Severity: SeverityError, Message: fmt.Sprintf("Secret Material for %s/%s/%s is unreadable", managedCLI, contextName, field)})
 					continue
 				}
 				if !exists {
@@ -275,7 +277,7 @@ func checkInstalledShims(options Options) []Finding {
 		name := entry.Name()
 		path := filepath.Join(options.Paths.ShimDir, name)
 		if options.Supported != nil && !options.Supported.IsSupported(name) {
-			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("unknown Shim in shim directory: %s", name)})
+			findings = append(findings, Finding{Severity: SeverityWarning, Message: fmt.Sprintf("Shim has no available Connector: %s", name)})
 		}
 		if entry.Type()&os.ModeSymlink == 0 {
 			findings = append(findings, Finding{Severity: SeverityError, Message: fmt.Sprintf("Shim is not a symlink: %s", path)})

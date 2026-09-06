@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/connectors"
 	"github.com/lakisyaman/cloak/internal/contextstore"
 	"github.com/lakisyaman/cloak/internal/notice"
 	"github.com/lakisyaman/cloak/internal/secrets"
@@ -27,28 +27,19 @@ func (fn RealCommandDelegateFunc) Exec(realPath string, argv []string, env []str
 	return fn(realPath, argv, env)
 }
 
-type AdapterRegistry interface {
-	Get(managedCLI string) (adapters.Adapter, bool)
-}
-
-type adapterRegistryFunc func(managedCLI string) (adapters.Adapter, bool)
-
-func (fn adapterRegistryFunc) Get(managedCLI string) (adapters.Adapter, bool) {
-	return fn(managedCLI)
-}
-
 type InvocationOptions struct {
-	Version  string
-	Argv0    string
-	Args     []string
-	Stdout   io.Writer
-	Stderr   io.Writer
-	Resolver RealCommandResolver
-	Delegate RealCommandDelegate
-	Store    ContextStore
-	Adapters AdapterRegistry
-	Secrets  secrets.Store
-	Env      []string
+	Version    string
+	Argv0      string
+	Args       []string
+	Stdout     io.Writer
+	Stderr     io.Writer
+	Resolver   RealCommandResolver
+	Delegate   RealCommandDelegate
+	Store      ContextStore
+	Connectors *connectors.Store
+	Paths      contextstore.Paths
+	Secrets    secrets.Store
+	Env        []string
 }
 
 func ExecuteInvocation(version, argv0 string, args []string, stdout, stderr io.Writer) error {
@@ -70,18 +61,7 @@ func ExecuteInvocationWithOptions(options InvocationOptions) error {
 
 	invocation := shim.DetectInvocation(options.Argv0)
 	if invocation.Mode == shim.StandaloneMode {
-		return Execute(options.Version, options.Args, options.Stdout, options.Stderr)
-	}
-
-	if shim.IsControlPrefix(options.Args) {
-		cmd := NewShimControlCommandWithEnv(options.Version, invocation.ManagedCLI, CommandEnv{
-			Store:           options.Store,
-			Secrets:         options.Secrets,
-			Resolver:        options.Resolver,
-			Adapters:        options.Adapters,
-			PathEnv:         os.Getenv("PATH"),
-			CloakBinaryPath: options.Argv0,
-		})
+		cmd := NewRootCommandWithEnv(options.Version, CommandEnv{Paths: options.Paths, Store: options.Store, Secrets: options.Secrets, Resolver: options.Resolver, Connectors: options.Connectors})
 		cmd.SetArgs(options.Args)
 		cmd.SetOut(options.Stdout)
 		cmd.SetErr(options.Stderr)
@@ -103,13 +83,13 @@ func ExecuteInvocationWithOptions(options InvocationOptions) error {
 		return delegateUnchanged(options, realPath)
 	}
 
-	adapter, ok := options.Adapters.Get(invocation.ManagedCLI)
-	if !ok {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "missing adapter")
-		return fmt.Errorf("missing adapter for Managed CLI %s", invocation.ManagedCLI)
+	connector, err := options.Connectors.Get(invocation.ManagedCLI)
+	if err != nil {
+		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "Connector unavailable")
+		return err
 	}
 
-	if adapter.DetectExplicitConnectionInput(options.Args, options.Env) {
+	if connector.Detect(connectors.Invocation{Args: options.Args, Env: options.Env}).Passthrough {
 		notice.ExplicitConnectionInput(options.Stderr, invocation.ManagedCLI)
 		return delegateUnchanged(options, realPath)
 	}
@@ -123,19 +103,13 @@ func ExecuteInvocationWithOptions(options InvocationOptions) error {
 	ctx, ok := findContext(config, invocation.ManagedCLI, activeContextName)
 	if !ok {
 		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "active context not found")
-		return fmt.Errorf("active context %s/%s not found", invocation.ManagedCLI, activeContextName)
+		return fmt.Errorf("active context not found; run cloak %s context configure %s", invocation.ManagedCLI, activeContextName)
 	}
 
-	secretValues, err := loadSecretValues(options.Secrets, ctx)
+	activated, err := connector.Activate(connectors.Invocation{Args: options.Args, Env: options.Env}, ctx, options.Secrets)
 	if err != nil {
 		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, err.Error())
-		return err
-	}
-
-	activated, err := adapter.Activate(adapters.Invocation{Args: options.Args, Env: options.Env}, ctx, secretValues)
-	if err != nil {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, err.Error())
-		return err
+		return fmt.Errorf("%w; run cloak %s context configure %s", err, invocation.ManagedCLI, activeContextName)
 	}
 
 	notice.Activated(options.Stderr, invocation.ManagedCLI, activeContextName)
@@ -159,19 +133,11 @@ func prepareInvocationOptions(options InvocationOptions) (InvocationOptions, err
 	if options.Env == nil {
 		options.Env = os.Environ()
 	}
-	if options.Adapters == nil {
-		options.Adapters = adapterRegistryFunc(adapters.Get)
-	}
 	if options.Secrets == nil {
 		options.Secrets = secrets.KeyringStore{}
 	}
-	if options.Store == nil {
-		paths, err := contextstore.DefaultPaths()
-		if err != nil {
-			return InvocationOptions{}, err
-		}
-		options.Store = fileContextStore{configPath: paths.ConfigFile, statePath: paths.StateFile}
-	}
+	env := normalizeCommandEnv(CommandEnv{Paths: options.Paths, Store: options.Store, Connectors: options.Connectors})
+	options.Paths, options.Store, options.Connectors = env.Paths, env.Store, env.Connectors
 	return options, nil
 }
 
@@ -187,18 +153,6 @@ func findContext(config contextstore.Config, managedCLI, contextName string) (co
 	}
 	ctx, ok := managedConfig.Contexts[contextName]
 	return ctx, ok
-}
-
-func loadSecretValues(store secrets.Store, ctx contextstore.Context) (map[string]string, error) {
-	values := map[string]string{}
-	for field, ref := range ctx.Secrets {
-		value, err := store.Get(ref)
-		if err != nil {
-			return nil, fmt.Errorf("missing secret %s", field)
-		}
-		values[field] = value
-	}
-	return values, nil
 }
 
 type realCommandExecDelegate struct{}

@@ -19,9 +19,9 @@ properties:
 2. **Connection/credential-bearing** — needs a connection target
    (host/endpoint/URI), optional identity, and Secret Material on each
    invocation.
-3. **Fits the Adapter model** — its connection state can be applied by
+3. **Fits the Connector model** — its connection state can be applied declaratively by
    ephemeral Activation through argv/env, and Explicit Connection Input is
-   detectable (per `docs/architecture.md`'s Adapter contract).
+   detectable (per `docs/architecture.md`'s Connector contract).
 4. **No native context/profile mechanism.** This is the decisive filter. A CLI
    that already has named, switchable connection profiles gains little from
    Cloak.
@@ -36,30 +36,30 @@ Property 4 eliminates most look-alike candidates — see
 
 ### Tier 1 — highest priority
 
-| Managed CLI | Backend | 2026 usage | Native context? | Adapter fit |
+| Managed CLI | Backend | 2026 usage | Native context? | Connector fit |
 |---|---|---|---|---|
-| `mysql` / `mariadb` | MySQL / MariaDB | #2 database, 40.5% (SO 2025) | `mysql`: PARTIAL — `mysql_config_editor` login-paths in `~/.mylogin.cnf` (obscure, no switch command). `mariadb`: NONE | **Strong.** Near-twin of the existing `psql` Adapter: `-h -P -u` argv + `MYSQL_PWD` env for Secret Material; positional database = Scope Selection |
+| `mysql` / `mariadb` | MySQL / MariaDB | #2 database, 40.5% (SO 2025) | `mysql`: PARTIAL — `mysql_config_editor` login-paths in `~/.mylogin.cnf` (obscure, no switch command). `mariadb`: NONE | **Strong.** Near-twin of the existing `psql` Connector: `-h -P -u` argv + `MYSQL_PWD` env for Secret Material; positional database = Scope Selection |
 | `clickhouse-client` | ClickHouse | Rising fast (leading analytics DB) | PARTIAL — single config file, no named-connection switch | **Strong.** Same shape as `psql`/`mysql`: `--host --port --user --password --secure` |
 | `vault` | HashiCorp Vault | High (infra / secrets) | NONE — `VAULT_ADDR` + `VAULT_TOKEN` env only | **Clean** env Activation; token is Secret Material. HashiCorp shipped a separate "Target CLI" specifically to add context switching to Vault/Consul/Nomad — direct evidence of demand |
 
 `mysql`/`mariadb` is the single largest gap: the most-used credential-bearing
-CLI not yet covered, and almost the same Adapter already written for `psql`.
+CLI not yet covered, and similar declarative bindings to the existing `psql` definition.
 Of the other two, `clickhouse-client` is the lowest-risk, on-thesis pick
 (another database query client); `vault` has the strongest proven demand but is
 a different archetype (address + token rather than host/user/password).
 
-### Tier 2 — strong, more niche or more Adapter work
+### Tier 2 — strong, more niche or more Connector work
 
 - **`valkey-cli`** (Valkey) — cheapest win: a `redis-cli` fork with identical
   flags, rising as Redis relicensing pushes distros/clouds to Valkey. The
-  `redis-cli` Adapter nearly is the `valkey-cli` Adapter. Secret Material via
+  `redis-cli` Connector nearly is the `valkey-cli` Connector. Secret Material via
   `VALKEYCLI_AUTH`.
 - **`cqlsh`** (Cassandra / Scylla) — clean fit: `host port -u -p`, keyspace
   `-k` as Scope Selection. Single `cqlshrc` only (no switching).
 - **`cypher-shell`** (Neo4j) — dominant graph database; clean `-a -u -p` fit;
   no native profiles.
 - **Kafka — `kcat` + `kafka-console-consumer`/`-producer`** — high operator
-  pain and value, but **more Adapter work**: the console tools authenticate via
+  pain and value, but **more Connector work**: the console tools authenticate via
   a `--command-config` properties file, so Activation means generating an
   ephemeral properties file rather than only argv/env. `kcat` is simpler
   (`-b` + `-X sasl.*`).
@@ -70,7 +70,7 @@ a different archetype (address + token rather than host/user/password).
 ### Tier 3 — emerging / watch
 
 - **`cockroach sql`** — speaks the PostgreSQL wire protocol via
-  `--url postgresql://…`; partly served by a `psql` Adapter already.
+  `--url postgresql://…`; partly served by a `psql` Connector already.
 - **`surreal sql`** (SurrealDB) — clean fit (`--endpoint --user --pass
   --token`), but still early/niche.
 
@@ -91,21 +91,21 @@ the filter.
 
 ## Not a fit
 
-No connection identity to manage, so the Adapter model does not apply:
+No connection identity to manage, so the Connector model does not apply:
 
 - **`sqlite`, `duckdb`, `bq`** — local files or GCP application-default
   credentials; no host/identity/secret to activate.
 - **Vector / search engines (`qdrant`, `pinecone`, `weaviate`, `meilisearch`)**
   — mostly have no official query CLI to shim; accessed via SDK/REST.
 
-## Adapter-design notes
+## Connector-design notes
 
-Carry these into any new Adapter spec:
+Carry these into any new Connector spec:
 
 1. **`-P` is overloaded.** It means *port* in `mysql`/`mariadb` but *password*
    in some clients (e.g. legacy `sqlcmd`, `snowsql`). Explicit Connection Input
-   detection must be per-Adapter, never shared across Adapters.
-2. **Secret Material passing has ~5 patterns** to model per Adapter: inline
+   detection must be per-Connector, never shared across Connectors.
+2. **Secret Material passing has ~5 patterns** to model per Connector: inline
    flag (with the tool's own insecurity warning), dedicated env var
    (`MYSQL_PWD`, `REDISCLI_AUTH`, `VAULT_TOKEN`), credential file, connection
    URI, and token-only (vault, etcd). The env-var path is the cleanest

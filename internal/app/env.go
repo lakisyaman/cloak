@@ -2,8 +2,9 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 
-	"github.com/lakisyaman/cloak/internal/adapters"
+	"github.com/lakisyaman/cloak/internal/connectors"
 	"github.com/lakisyaman/cloak/internal/contextstore"
 	"github.com/lakisyaman/cloak/internal/doctor"
 	"github.com/lakisyaman/cloak/internal/secrets"
@@ -18,11 +19,14 @@ type ContextStore interface {
 }
 
 type CommandEnv struct {
-	Paths           contextstore.Paths
-	Store           ContextStore
-	Secrets         secrets.Store
-	Resolver        RealCommandResolver
-	Adapters        AdapterRegistry
+	Paths      contextstore.Paths
+	Store      ContextStore
+	Secrets    secrets.Store
+	Resolver   RealCommandResolver
+	Connectors *connectors.Store
+	// Interactive and ReadSecret allow terminal I/O to be exercised without a TTY.
+	Interactive     func() bool
+	ReadSecret      func() (string, error)
 	PathEnv         string
 	CloakBinaryPath string
 }
@@ -42,7 +46,7 @@ func DefaultCommandEnv() (CommandEnv, error) {
 		Store:           store,
 		Secrets:         secrets.KeyringStore{},
 		Resolver:        shim.RealCommandResolver{PathEnv: os.Getenv("PATH"), CloakBinaryPath: cloakBinary},
-		Adapters:        adapterRegistryFunc(adapters.Get),
+		Connectors:      &connectors.Store{Dir: filepath.Join(paths.Dir, "connectors")},
 		PathEnv:         os.Getenv("PATH"),
 		CloakBinaryPath: cloakBinary,
 	}, nil
@@ -57,16 +61,13 @@ func normalizeCommandEnv(env CommandEnv) CommandEnv {
 		env.Paths = defaults.Paths
 	}
 	if env.Store == nil {
-		env.Store = defaults.Store
+		env.Store = fileContextStore{configPath: env.Paths.ConfigFile, statePath: env.Paths.StateFile}
 	}
 	if env.Secrets == nil {
 		env.Secrets = defaults.Secrets
 	}
-	if env.Resolver == nil {
-		env.Resolver = defaults.Resolver
-	}
-	if env.Adapters == nil {
-		env.Adapters = defaults.Adapters
+	if env.Connectors == nil {
+		env.Connectors = &connectors.Store{Dir: filepath.Join(env.Paths.Dir, "connectors")}
 	}
 	if env.PathEnv == "" {
 		env.PathEnv = defaults.PathEnv
@@ -74,16 +75,20 @@ func normalizeCommandEnv(env CommandEnv) CommandEnv {
 	if env.CloakBinaryPath == "" {
 		env.CloakBinaryPath = defaults.CloakBinaryPath
 	}
+	if env.Resolver == nil {
+		env.Resolver = shim.RealCommandResolver{PathEnv: env.PathEnv, CloakBinaryPath: env.CloakBinaryPath}
+	}
 	return env
 }
 
 func doctorOptionsFromEnv(env CommandEnv) doctor.Options {
+	names, _ := env.Connectors.Names()
 	return doctor.Options{
 		Paths:           env.Paths,
 		PathEnv:         env.PathEnv,
 		CloakBinaryPath: env.CloakBinaryPath,
-		Supported:       doctor.SupportedCLIFunc(adapters.IsSupported),
-		SupportedNames:  adapters.SupportedManagedCLIs(),
+		Supported:       doctor.SupportedCLIFunc(func(name string) bool { _, err := env.Connectors.Get(name); return err == nil }),
+		SupportedNames:  names,
 		SecretChecker:   doctor.KeyringSecretChecker{Store: env.Secrets},
 	}
 }
