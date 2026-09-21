@@ -129,6 +129,8 @@ func TestMySQLScopeSecretsAndNativeParsing(t *testing.T) {
 		{[]string{"-eselect 1"}, true, false},
 		{[]string{"--execute=select 1"}, true, false},
 		{[]string{"--init-command", "set names utf8mb4"}, true, false},
+		{[]string{"--init-command-add", "SET @cloak_probe=1", "-e", "select database()"}, true, false},
+		{[]string{"--init-command-add=SET @cloak_probe=1", "-e", "select database()"}, true, false},
 		{[]string{"-D", "analytics"}, false, false},
 		{[]string{"-Danalytics"}, false, false},
 		{[]string{"--database=analytics"}, false, false},
@@ -146,6 +148,8 @@ func TestMySQLScopeSecretsAndNativeParsing(t *testing.T) {
 		{[]string{"-P", "3307"}, false, true},
 		{[]string{"-S", "/tmp/mysql.sock"}, false, true},
 		{[]string{"--login-path=prod"}, false, true},
+		{[]string{"--no-defaults", "-e", "select 1"}, false, true},
+		{[]string{"--no-login-paths", "-e", "select 1"}, false, true},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			inv := Invocation{Args: tc.args}
@@ -201,6 +205,56 @@ func TestMySQLScopeSecretsAndNativeParsing(t *testing.T) {
 	// A caller credential must skip the secret store, which is unavailable here.
 	if _, err := d.Activate(Invocation{Env: []string{"MYSQL_PWD=caller"}}, ctx, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMySQLDNSSRVConnectionPassesThrough(t *testing.T) {
+	d := registryDefinition(t, "mysql")
+	ctx := contextstore.Context{
+		Metadata: map[string]any{"host": "db.internal", "username": "reporter", "defaultDatabase": "saved"},
+		Secrets: map[string]secrets.SecretRef{
+			"password": secrets.NewRef("mysql", "prod", "password"),
+		},
+	}
+	for _, args := range [][]string{
+		{"--dns-srv-name=_mysql._tcp.other.example", "-e", "select 1"},
+		{"--dns-srv-name", "_mysql._tcp.other.example", "-e", "select 1"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			inv := Invocation{Args: args, Env: []string{"PATH=/usr/bin", "TERM=xterm"}}
+			if !d.Detect(inv).Passthrough {
+				t.Error("explicit DNS SRV target must bypass context activation")
+			}
+			// Passthrough must not read the saved password, even when the
+			// secret store is unavailable.
+			result, err := d.Activate(inv, ctx, nil)
+			if err != nil {
+				t.Fatalf("explicit DNS SRV target accessed context secrets: %v", err)
+			}
+			if !reflect.DeepEqual(result, inv) {
+				t.Fatalf("passthrough changed the invocation: got %#v; want %#v", result, inv)
+			}
+		})
+	}
+}
+
+func TestMySQLNoDefaultsRemainsFirst(t *testing.T) {
+	d := registryDefinition(t, "mysql")
+	ctx := contextstore.Context{
+		Metadata: map[string]any{"host": "db.internal", "username": "reporter", "defaultDatabase": "saved"},
+	}
+	inv := Invocation{Args: []string{"--no-defaults", "-e", "select 1"}}
+	result, err := d.Activate(inv, ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// MySQL processes this option before ordinary options. Either
+	// passthrough or activation must preserve that required position.
+	if len(result.Args) == 0 || result.Args[0] != "--no-defaults" {
+		t.Fatalf("--no-defaults must remain the first argument: got %q", result.Args)
+	}
+	if len(result.Args) < 3 || !reflect.DeepEqual(result.Args[len(result.Args)-2:], inv.Args[1:]) {
+		t.Fatalf("changed the native query arguments: got %q", result.Args)
 	}
 }
 
