@@ -38,12 +38,13 @@ Property 4 eliminates most look-alike candidates — see
 
 | Managed CLI | Backend | 2026 usage | Native context? | Connector fit |
 |---|---|---|---|---|
-| `mysql` / `mariadb` | MySQL / MariaDB | #2 database, 40.5% (SO 2025) | `mysql`: PARTIAL — `mysql_config_editor` login-paths in `~/.mylogin.cnf` (obscure, no switch command). `mariadb`: NONE | **Strong.** Near-twin of the existing `psql` Connector: `-h -P -u` argv + `MYSQL_PWD` env for Secret Material; positional database = Scope Selection |
+| `mysql` / `mariadb` | MySQL / MariaDB | #2 database, 40.5% (SO 2025) | `mysql`: PARTIAL — `mysql_config_editor` login-paths in `~/.mylogin.cnf` (obscure, no switch command). `mariadb`: NONE | **Shipped** as `registry/mysql.yaml`. `mariadb` still open; its client is a near-twin of the `mysql` definition |
 | `clickhouse-client` | ClickHouse | Rising fast (leading analytics DB) | PARTIAL — single config file, no named-connection switch | **Strong.** Same shape as `psql`/`mysql`: `--host --port --user --password --secure` |
 | `vault` | HashiCorp Vault | High (infra / secrets) | NONE — `VAULT_ADDR` + `VAULT_TOKEN` env only | **Clean** env Activation; token is Secret Material. HashiCorp shipped a separate "Target CLI" specifically to add context switching to Vault/Consul/Nomad — direct evidence of demand |
 
-`mysql`/`mariadb` is the single largest gap: the most-used credential-bearing
-CLI not yet covered, and similar declarative bindings to the existing `psql` definition.
+`mysql` closed the single largest gap: the most-used credential-bearing
+CLI, with declarative bindings similar to the existing `psql` definition. `mariadb`
+remains open and can reuse the same bindings.
 Of the other two, `clickhouse-client` is the lowest-risk, on-thesis pick
 (another database query client); `vault` has the strongest proven demand but is
 a different archetype (address + token rather than host/user/password).

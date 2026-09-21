@@ -65,6 +65,70 @@ func TestCloakActivatesRealManagedCLIsAgainstLiveBackends(t *testing.T) {
 		}
 	})
 
+	t.Run("mysql", func(t *testing.T) {
+		mysql := StartMySQL(t, ctx)
+		env, shimPath := newCloakIntegrationEnv(t, "mysql")
+		runContextCommand(t, env, "mysql", "context", "configure", "production",
+			"--host", "127.0.0.1",
+			"--port", "3306",
+			"--username", mysql.Username,
+			"--password", mysql.Password,
+			"--default-database", mysql.Database,
+			"--ssl-mode", "PREFERRED",
+		)
+		runContextCommand(t, env, "mysql", "context", "switch", "production")
+
+		delegate := &containerDelegate{t: t, ctx: ctx, container: mysql.Container}
+		var stderr bytes.Buffer
+		if err := app.ExecuteInvocationWithOptions(app.InvocationOptions{
+			Paths:    env.Paths,
+			Version:  "test",
+			Argv0:    shimPath,
+			Args:     []string{"--init-command-add", "SET @cloak_probe=1", "--skip-column-names", "--silent", "--execute", "select database(), current_user(), @cloak_probe"},
+			Stderr:   &stderr,
+			Resolver: env.Resolver,
+			Delegate: delegate,
+			Store:    env.Store,
+			Secrets:  env.Secrets,
+			Env:      []string{},
+		}); err != nil {
+			t.Fatalf("activate mysql against live backend: %v", err)
+		}
+		if !strings.Contains(delegate.output, mysql.Database) || !strings.Contains(delegate.output, mysql.Username+"@") {
+			t.Fatalf("expected mysql to use context database and identity, got output %q", delegate.output)
+		}
+		if !strings.HasSuffix(strings.TrimSpace(delegate.output), "\t1") {
+			t.Fatalf("expected init-command-add to execute, got output %q", delegate.output)
+		}
+		// The native -p option takes no separate value, so the password must
+		// reach the client through MYSQL_PWD instead of the command line.
+		if strings.Contains(delegate.output, mysql.Password) {
+			t.Fatal("password reached the Real Command output")
+		}
+		if !strings.Contains(stderr.String(), "cloak: activated mysql context production") {
+			t.Fatalf("expected activation notice, got %q", stderr.String())
+		}
+		for _, option := range []string{"--no-defaults", "--no-login-paths"} {
+			t.Run(option, func(t *testing.T) {
+				stderr.Reset()
+				// --help lets the real client validate option ordering without
+				// requiring credentials after context activation is bypassed.
+				err := app.ExecuteInvocationWithOptions(app.InvocationOptions{
+					Paths: env.Paths, Version: "test", Argv0: shimPath,
+					Args: []string{option, "--help"}, Stderr: &stderr,
+					Resolver: env.Resolver, Delegate: delegate, Store: env.Store,
+					Secrets: env.Secrets, Env: []string{},
+				})
+				if err != nil {
+					t.Fatalf("native client rejected %s: %v", option, err)
+				}
+				if strings.Contains(stderr.String(), "activated mysql context") {
+					t.Fatalf("option-file control must pass through: %s", stderr.String())
+				}
+			})
+		}
+	})
+
 	t.Run("redis-cli", func(t *testing.T) {
 		redis := StartRedis(t, ctx)
 		env, shimPath := newCloakIntegrationEnv(t, "redis-cli")

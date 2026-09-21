@@ -11,4 +11,14 @@ To contribute a Connector:
 
 The initial definitions preserve the supported connection, authentication, database, and transport behavior of the previous built-in implementation. psql database flags always use the agreed field override behavior. MongoDB's full URI is stored as Secret Material and supports both ordinary and credential-bearing URIs.
 
-Parser references: [PostgreSQL psql documentation](https://www.postgresql.org/docs/current/app-psql.html) and [Redis CLI option parsing](https://github.com/redis/redis/blob/7.2/src/redis-cli.c). These definitions cover the declared inputs rather than validate the complete native CLI grammar; add selectors and parsing hints as native commands evolve.
+The MySQL definition stores the password as Secret Material and injects it through
+`MYSQL_PWD`, because the native `-p` option accepts no separate value. `--ssl-mode`
+is a Transport Option, and the remaining `--ssl-*` and `--tls-*` options are parser
+hints only, so they compose with an Active Context instead of skipping it.
+`--login-path`, `--defaults-file`, and the socket options carry their own connection
+identity, so they are passthrough inputs.
+`--dns-srv-name` also selects a connection target and bypasses Activation.
+`--no-defaults` and `--no-login-paths` pass through to preserve MySQL's required
+option ordering; these invocations do not use the Active Context.
+
+Parser references: [PostgreSQL psql documentation](https://www.postgresql.org/docs/current/app-psql.html), [MySQL client options](https://dev.mysql.com/doc/refman/8.4/en/mysql-command-options.html), and [Redis CLI option parsing](https://github.com/redis/redis/blob/7.2/src/redis-cli.c). These definitions cover the declared inputs rather than validate the complete native CLI grammar; add selectors and parsing hints as native commands evolve.

@@ -26,6 +26,26 @@ func TestManagedCLIBackendsStart(t *testing.T) {
 		t.Logf("postgres ready at %s:%s database=%s username=%s", pg.Host, pg.Port, pg.Database, pg.Username)
 	})
 
+	t.Run("mysql", func(t *testing.T) {
+		mysql := StartMySQL(t, ctx)
+		cmd := append([]string{"mysql"}, mysql.Args()...)
+		cmd = append(cmd, "--skip-column-names", "--silent", "--execute", "select 1")
+		// The client warns about a command-line password, so read the result line.
+		selected := func(output string) bool {
+			for _, line := range strings.Split(output, "\n") {
+				if strings.TrimSpace(line) == "1" {
+					return true
+				}
+			}
+			return false
+		}
+		output := eventuallyExecInContainer(t, ctx, mysql.Container, cmd, selected)
+		if !selected(output) {
+			t.Fatalf("expected mysql select result 1, got: %s", output)
+		}
+		t.Logf("mysql ready at %s:%s database=%s username=%s", mysql.Host, mysql.Port, mysql.Database, mysql.Username)
+	})
+
 	t.Run("redis", func(t *testing.T) {
 		redis := StartRedis(t, ctx)
 		output := execInContainer(t, ctx, redis.Container, []string{"redis-cli", "-a", redis.Password, "ping"})

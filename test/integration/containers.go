@@ -19,6 +19,7 @@ const (
 	postgresImage = "postgres:16-alpine"
 	redisImage    = "redis:7-alpine"
 	mongoImage    = "mongo:7"
+	mysqlImage    = "mysql:8.4"
 )
 
 type PostgresContainer struct {
@@ -69,6 +70,20 @@ type MongoContainer struct {
 
 func (c MongoContainer) URI() string {
 	return fmt.Sprintf("mongodb://%s:%s", c.Host, c.Port)
+}
+
+type MySQLContainer struct {
+	Container testcontainers.Container
+	Host      string
+	Port      string
+	Database  string
+	Username  string
+	Password  string
+}
+
+// Args uses the equals form so that redactedCommand hides the password.
+func (c MySQLContainer) Args() []string {
+	return []string{"--host=127.0.0.1", "--user=" + c.Username, "--password=" + c.Password, "--database=" + c.Database}
 }
 
 func StartPostgres(t *testing.T, ctx context.Context) PostgresContainer {
@@ -158,6 +173,43 @@ func StartMongo(t *testing.T, ctx context.Context) MongoContainer {
 
 	host, port := endpoint(t, ctx, container, "27017/tcp")
 	return MongoContainer{Container: container, Host: host, Port: port, Username: username, Password: password}
+}
+
+func StartMySQL(t *testing.T, ctx context.Context) MySQLContainer {
+	t.Helper()
+
+	const (
+		database = "cloak_test"
+		username = "cloak"
+		password = "cloak_secret"
+	)
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		Started: true,
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image: mysqlImage,
+			Env: map[string]string{
+				"MYSQL_ROOT_PASSWORD": "cloak_root_secret",
+				"MYSQL_DATABASE":      database,
+				"MYSQL_USER":          username,
+				"MYSQL_PASSWORD":      password,
+			},
+			ExposedPorts: []string{"3306/tcp"},
+			WaitingFor: wait.ForAll(
+				wait.ForListeningPort("3306/tcp"),
+				// The entrypoint starts a temporary server first, so the
+				// second occurrence marks the real server.
+				wait.ForLog("mysqld: ready for connections").WithOccurrence(2),
+			).WithStartupTimeout(180 * time.Second),
+		},
+	})
+	if err != nil {
+		t.Fatalf("start mysql testcontainer: %v", err)
+	}
+	t.Cleanup(func() { terminateContainer(t, ctx, container) })
+
+	host, port := endpoint(t, ctx, container, "3306/tcp")
+	return MySQLContainer{Container: container, Host: host, Port: port, Database: database, Username: username, Password: password}
 }
 
 func endpoint(t *testing.T, ctx context.Context, container testcontainers.Container, exposedPort string) (string, string) {
