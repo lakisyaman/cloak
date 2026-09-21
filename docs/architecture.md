@@ -28,7 +28,7 @@ Installation and update do not create, configure, select, or validate Contexts. 
 
 ## Declarative runtime
 
-`internal/connectors` contains one YAML parser, input detector, Activation engine, and installed-definition store. There are no Managed CLI-specific Go implementations. `mongosh`, `psql`, and `redis-cli` are optional reference definitions.
+`internal/connectors` contains one YAML parser, input detector, Activation engine, and installed-definition store. There are no Managed CLI-specific Go implementations. `mongosh`, `mysql`, `psql`, and `redis-cli` are optional reference definitions.
 
 Version 1 accepts scalar fields, required and secret annotations, configuration flag names, input selectors, injection bindings, and a URI default-path operation. Unknown schema properties, duplicate YAML keys, conflicting bindings, unsupported versions, and invalid command names fail validation. Embedded scripts, hooks, expressions, arbitrary templates, and value-dependent input behaviors are unsupported.
 
@@ -120,4 +120,4 @@ The design draws on [Vercel skills](https://github.com/vercel-labs/skills) for a
 
 Deferred: executable hooks, formats other than YAML, additional remote registries and authentication, project-local selections, one-shot Context selection, native Windows Shims, disk logs, shell completions, a stable public JSON output API, and automatic doctor repairs.
 
-The tests load repository YAML, exercise a fourth custom CLI without adding runtime code, verify local and HTTP source snapshots and lifecycle separation, check parser/override/secret/error boundaries, and exercise configuration and rollback. Testcontainers scenarios install the definitions and run the real psql, redis-cli, and mongosh clients against live backends. Release builds ship the binary and ordinary project documents, with no embedded or archived registry definitions.
+The tests load repository YAML, exercise a fourth custom CLI without adding runtime code, verify local and HTTP source snapshots and lifecycle separation, check parser/override/secret/error boundaries, and exercise configuration and rollback. Testcontainers scenarios install the definitions and run the real psql, mysql, redis-cli, and mongosh clients against live backends. Release builds ship the binary and ordinary project documents, with no embedded or archived registry definitions.

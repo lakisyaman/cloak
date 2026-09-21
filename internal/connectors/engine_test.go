@@ -111,6 +111,99 @@ func TestPSQLScopeAndNativeParsing(t *testing.T) {
 	}
 }
 
+func TestMySQLScopeSecretsAndNativeParsing(t *testing.T) {
+	d := registryDefinition(t, "mysql")
+	ref := secrets.NewRef("mysql", "prod", "password")
+	ctx := contextstore.Context{
+		Metadata: map[string]any{"host": "db.internal", "port": 3306, "username": "reporter", "defaultDatabase": "saved", "sslMode": "VERIFY_IDENTITY"},
+		Secrets:  map[string]secrets.SecretRef{"password": ref},
+	}
+	store := testSecrets{ref: "s3cr3t"}
+	for _, tc := range []struct {
+		args     []string
+		database bool
+		pass     bool
+	}{
+		{[]string{"-e", "select 1"}, true, false},
+		{[]string{"-Ne", "select 1"}, true, false},
+		{[]string{"-eselect 1"}, true, false},
+		{[]string{"--execute=select 1"}, true, false},
+		{[]string{"--init-command", "set names utf8mb4"}, true, false},
+		{[]string{"-D", "analytics"}, false, false},
+		{[]string{"-Danalytics"}, false, false},
+		{[]string{"--database=analytics"}, false, false},
+		{[]string{"analytics", "-e", "select 1"}, false, false},
+		{[]string{"--", "analytics"}, false, false},
+		{[]string{"--ssl-mode", "DISABLED"}, true, false},
+		{[]string{"--ssl-ca", "/etc/ssl/ca.pem"}, true, false},
+		{[]string{"--future-native-flag"}, true, false},
+		{[]string{"-h", "other"}, false, true},
+		{[]string{"-hother"}, false, true},
+		{[]string{"-Nu", "root"}, false, true},
+		{[]string{"--user=root", "-D", "analytics"}, false, true},
+		{[]string{"-p"}, false, true},
+		{[]string{"-ps3cr3t"}, false, true},
+		{[]string{"-P", "3307"}, false, true},
+		{[]string{"-S", "/tmp/mysql.sock"}, false, true},
+		{[]string{"--login-path=prod"}, false, true},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			inv := Invocation{Args: tc.args}
+			if d.Detect(inv).Passthrough != tc.pass {
+				t.Fatal("wrong passthrough decision")
+			}
+			result, err := d.Activate(inv, ctx, store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			joined := strings.Join(result.Args, " ")
+			if tc.pass {
+				if !reflect.DeepEqual(result.Args, inv.Args) || envGet(result.Env, "MYSQL_PWD") != "" {
+					t.Fatal("explicit connection input must reach the Real Command unchanged")
+				}
+				return
+			}
+			if !reflect.DeepEqual(result.Args[len(result.Args)-len(tc.args):], tc.args) {
+				t.Fatalf("changed native args: %v", result.Args)
+			}
+			if envGet(result.Env, "MYSQL_HOST") != "db.internal" || envGet(result.Env, "MYSQL_TCP_PORT") != "3306" {
+				t.Fatal("server not activated")
+			}
+			// The native -p option takes no separate value, so the password
+			// reaches the client through the environment only.
+			if envGet(result.Env, "MYSQL_PWD") != "s3cr3t" || strings.Contains(joined, "s3cr3t") {
+				t.Fatalf("wrong password injection: %v", result.Args)
+			}
+			if strings.Count(joined, "--user reporter") != 1 {
+				t.Fatalf("wrong identity injection: %v", result.Args)
+			}
+			if strings.Count(joined, "--ssl-mode") != 1 {
+				t.Fatalf("duplicate transport option: %v", result.Args)
+			}
+			if (strings.Count(joined, "--database saved") == 1) != tc.database {
+				t.Fatalf("wrong database injection: %v", result.Args)
+			}
+		})
+	}
+	result, err := d.Activate(Invocation{}, ctx, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"--database", "saved", "--ssl-mode", "VERIFY_IDENTITY", "--user", "reporter"}
+	if !reflect.DeepEqual(result.Args, want) {
+		t.Fatalf("got %v; want %v", result.Args, want)
+	}
+	for _, entry := range []string{"MYSQL_HOST=caller", "MYSQL_TCP_PORT=3307", "MYSQL_PWD=caller", "MYSQL_UNIX_PORT=/tmp/mysql.sock", "MYSQL_HOME=/tmp/mysql", "MYSQL_GROUP_SUFFIX=_prod", "MYSQL_TEST_LOGIN_FILE=/tmp/.mylogin.cnf"} {
+		if !d.Detect(Invocation{Env: []string{entry}}).Passthrough {
+			t.Fatalf("missed %s", entry)
+		}
+	}
+	// A caller credential must skip the secret store, which is unavailable here.
+	if _, err := d.Activate(Invocation{Env: []string{"MYSQL_PWD=caller"}}, ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRedisActivationAndCommandPayload(t *testing.T) {
 	d := registryDefinition(t, "redis-cli")
 	ref := secrets.NewRef("redis-cli", "prod", "password")

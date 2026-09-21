@@ -27,7 +27,7 @@ cloak psql context switch production
 psql analytics
 ```
 
-The repository includes optional definitions for `mongosh`, `psql`, and `redis-cli`. More CLIs can be enabled by adding YAML definitions that use the shared runtime's capabilities. Cloak targets macOS and Linux and stores Secret Material in the OS keyring.
+The repository includes optional definitions for `mongosh`, `mysql`, `psql`, and `redis-cli`. More CLIs can be enabled by adding YAML definitions that use the shared runtime's capabilities. Cloak targets macOS and Linux and stores Secret Material in the OS keyring.
 
 ## Installation
 
@@ -109,7 +109,7 @@ An activated invocation prints `cloak: activated redis-cli context production` t
 
 Each Managed CLI has its own Contexts and one **user-global Active Context**. Switching affects subsequent invocations across directories and terminals. Configuration creates or edits a Context without selecting it; `switch` selects it. A new installation has no Connectors or Contexts.
 
-To use PostgreSQL or MongoDB, install `@cloak/psql` or `@cloak/mongosh` and use the corresponding name in the Context commands. Browse the [repository registry](./registry/) for available definitions; `cloak connector list` shows only those installed for you.
+To use PostgreSQL, MySQL, or MongoDB, install `@cloak/psql`, `@cloak/mysql`, or `@cloak/mongosh` and use the corresponding name in the Context commands. Browse the [repository registry](./registry/) for available definitions; `cloak connector list` shows only those installed for you.
 
 ## Everyday use
 

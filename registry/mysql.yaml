@@ -1,0 +1,46 @@
+version: 1
+command: mysql
+description: MySQL command-line client
+parsing:
+  shortOptions: true
+  valueFlags: ["-e", "--execute", "--init-command", "--delimiter", "--tee", "--prompt", "--default-character-set", "--character-sets-dir", "--protocol", "--bind-address", "--connect-timeout", "--max-allowed-packet", "--net-buffer-length", "--select-limit", "--max-join-size", "--default-auth", "--plugin-dir", "--server-public-key-path", "--compression-algorithms", "--zstd-compression-level", "--ssl-ca", "--ssl-capath", "--ssl-cert", "--ssl-cipher", "--ssl-key", "--ssl-crl", "--ssl-crlpath", "--ssl-fips-mode", "--tls-version", "--tls-ciphersuites", "--histignore", "--network-namespace"]
+passthrough:
+  flags: ["-S", "--socket", "--defaults-file", "--defaults-extra-file", "--defaults-group-suffix", "--login-path"]
+  env: [MYSQL_UNIX_PORT, MYSQL_HOME, MYSQL_GROUP_SUFFIX, MYSQL_TEST_LOGIN_FILE]
+fields:
+  host:
+    type: string
+    required: true
+    onInput: passthrough
+    input: {flags: ["-h", "--host"], env: [MYSQL_HOST]}
+    inject: {env: MYSQL_HOST}
+  port:
+    type: integer
+    onInput: passthrough
+    input: {flags: ["-P", "--port"], env: [MYSQL_TCP_PORT]}
+    inject: {env: MYSQL_TCP_PORT}
+  username:
+    type: string
+    onInput: passthrough
+    input: {flags: ["-u", "--user"]}
+    inject: {flag: "--user"}
+  password:
+    type: string
+    secret: true
+    onInput: passthrough
+    input: {flags: ["-p", "--password", "--password1"], env: [MYSQL_PWD]}
+    inject: {env: MYSQL_PWD}
+  defaultDatabase:
+    type: string
+    configureFlag: default-database
+    onInput: override
+    input:
+      flags: ["-D", "--database"]
+      positionals: [{index: 0}]
+    inject: {flag: "--database"}
+  sslMode:
+    type: string
+    configureFlag: ssl-mode
+    onInput: override
+    input: {flags: ["--ssl-mode"]}
+    inject: {flag: "--ssl-mode"}
