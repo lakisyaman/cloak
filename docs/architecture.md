@@ -56,7 +56,7 @@ cloak <cli> context switch <name>
 cloak <cli> context remove <name>
 ```
 
-Context names are scoped to a Managed CLI. Each CLI has at most one user-global Active Context. Configuration creates or merges values without selecting a Context. Switch only changes selection. Remove deletes Context values and Secret Material and clears its selection if active.
+Context names are scoped to a Managed CLI. Each CLI has at most one user-global Active Context. `CLOAK_<CLI>_CONTEXT` (upper case, `-` changed to `_`) is a Session Context Selection that wins over it in the processes that inherit the variable; `current`, `list`, and `show` report that selection. Configuration creates or merges values without selecting a Context. Switch only changes selection. Remove deletes Context values and Secret Material and clears its selection if active.
 
 The explicit configure command generates its flags from the installed definition. With interactive stdin and stderr, it prompts for fields not supplied as flags; Secret Material is read with terminal echo disabled. Blank answers keep existing values. Outside a terminal, supplied flags are merged with existing values and missing required fields cause an actionable error. `--clear <flag-name>` clears optional fields; boolean flags accept `--tls` or `--tls=false`. Wizard interruption or validation failure leaves stored data untouched.
 
@@ -69,7 +69,7 @@ MongoDB URIs are classified as Secret Material because they can contain embedded
 The basename of argv[0] identifies standalone Cloak versus a Shim. The standalone command owns all management. A Shim does not intercept a `cloak` argument; the former Control Prefix is retired.
 
 1. Resolve the Real Command from PATH, skipping any executable that canonically resolves to Cloak.
-2. Read the Active Context selection. A corrupt state file fails loudly.
+2. Read the Session Context Selection from `CLOAK_<CLI>_CONTEXT`; without it, read the Active Context selection from state. A corrupt state file fails loudly. A Session Context Selection that names a missing Context fails closed at step 6 and never falls back to state. Cloak's own variables are not Explicit Connection Input and reach the Real Command unchanged.
 3. With no selection, emit a stderr notice and delegate unchanged.
 4. Load the installed Connector. Missing or invalid definitions fail closed when Activation is needed.
 5. Detect caller inputs. Any passthrough match emits a notice and delegates unchanged without loading Context values or secrets.
@@ -102,7 +102,7 @@ An upgrade does not automatically download definitions. Existing users explicitl
 
 ## Agent instruction setup
 
-`cloak init` discovers existing agent instruction Markdown files in the current directory and adds Cloak usage guidance. `cloak init --global` targets user-level agent instruction locations. These scopes control instruction placement; Active Context selection remains user-global.
+`cloak init` discovers existing agent instruction Markdown files in the current directory and adds Cloak usage guidance. `cloak init --global` targets user-level agent instruction locations. These scopes control instruction placement; Active Context selection remains user-global unless `CLOAK_<CLI>_CONTEXT` is set.
 
 Current-directory discovery checks `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md`. It stays within these known locations under the current directory. Global discovery checks the agents' user instruction locations, normally `~/.codex/AGENTS.md`, `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, and `~/.copilot/copilot-instructions.md`. `CODEX_HOME` and `CLAUDE_CONFIG_DIR` override the respective user configuration directories.
 
@@ -110,7 +110,7 @@ All discovered files in the selected scope receive the guidance. If no matching 
 
 The guidance occupies one section delimited by `<!-- cloak:start -->` and `<!-- cloak:end -->`. Repeating init refreshes that section while preserving surrounding instructions, avoids duplicate sections and unnecessary writes, and reports created, updated, or unchanged files. All targets are read and validated before writing; incomplete, reversed, or duplicate markers fail with repair guidance. Each changed file is replaced atomically, retaining existing permissions and using its newline style for the inserted section. New local files use mode 0644 and global files 0600. Symlinks are resolved without replacing the link, shared targets are deduplicated, and local setup rejects targets outside the current directory. Dangling links and non-regular files fail. Multiple file writes are not one transaction; an I/O failure may leave previously reported files updated.
 
-The section explains how to discover installed Connectors with `cloak connector list`, inspect and switch Contexts with `cloak <cli> context ...`, invoke the native CLI through its Shim, and use `--help` for navigation. It also explains `cloak connector add @cloak/<cli>` for tasks that require enabling a new Managed CLI and links to the repository registry for available definitions. Connector installation remains separate from Context Configuration. The section contains generic instructions rather than a snapshot of installed Connectors or Context values.
+The section explains how to discover installed Connectors with `cloak connector list`, inspect and switch Contexts with `cloak <cli> context ...`, prefer `CLOAK_<CLI>_CONTEXT` for session-scoped selection, invoke the native CLI through its Shim, and use `--help` for navigation. It also explains `cloak connector add @cloak/<cli>` for tasks that require enabling a new Managed CLI and links to the repository registry for available definitions. Connector installation remains separate from Context Configuration. The section contains generic instructions rather than a snapshot of installed Connectors or Context values.
 
 `internal/agentsetup` owns discovery, section replacement, and file persistence. The [instruction text](../internal/agentsetup/instructions.md) is embedded in the binary and refreshed only by rerunning init. It contains no Connector definitions or user data. Init does not acquire Connectors, configure Contexts, or access Secret Material, and works when Context data is corrupt.
 
@@ -118,6 +118,6 @@ The design draws on [Vercel skills](https://github.com/vercel-labs/skills) for a
 
 ## Boundaries and verification
 
-Deferred: executable hooks, formats other than YAML, additional remote registries and authentication, project-local selections, one-shot Context selection, native Windows Shims, disk logs, shell completions, a stable public JSON output API, and automatic doctor repairs.
+Deferred: executable hooks, formats other than YAML, additional remote registries and authentication, project-local selections, one-shot Context selection beyond `CLOAK_<CLI>_CONTEXT`, native Windows Shims, disk logs, shell completions, a stable public JSON output API, and automatic doctor repairs.
 
 The tests load repository YAML, exercise a fourth custom CLI without adding runtime code, verify local and HTTP source snapshots and lifecycle separation, check parser/override/secret/error boundaries, and exercise configuration and rollback. Testcontainers scenarios install the definitions and run the real psql, mysql, redis-cli, and mongosh clients against live backends. Release builds ship the binary and ordinary project documents, with no embedded or archived registry definitions.

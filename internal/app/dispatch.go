@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/lakisyaman/cloak/internal/connectors"
@@ -73,19 +74,26 @@ func ExecuteInvocationWithOptions(options InvocationOptions) error {
 		return err
 	}
 
-	state, err := options.Store.ReadState()
-	if err != nil {
-		return fmt.Errorf("read state: %w", err)
+	activeContextName, sessionVariable := sessionContext(invocation.ManagedCLI, options.Env)
+	if activeContextName == "" {
+		state, err := options.Store.ReadState()
+		if err != nil {
+			return fmt.Errorf("read state: %w", err)
+		}
+		activeContextName = state.ActiveContexts[invocation.ManagedCLI]
 	}
-	activeContextName := state.ActiveContexts[invocation.ManagedCLI]
 	if activeContextName == "" {
 		notice.NoActiveContext(options.Stderr, invocation.ManagedCLI)
 		return delegateUnchanged(options, realPath)
 	}
+	contextLabel := activeContextName
+	if sessionVariable != "" {
+		contextLabel += " (from " + sessionVariable + ")"
+	}
 
 	connector, err := options.Connectors.Get(invocation.ManagedCLI)
 	if err != nil {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "Connector unavailable")
+		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, contextLabel, "Connector unavailable")
 		return err
 	}
 
@@ -96,23 +104,26 @@ func ExecuteInvocationWithOptions(options InvocationOptions) error {
 
 	config, err := options.Store.ReadConfig()
 	if err != nil {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "config could not be loaded")
+		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, contextLabel, "config could not be loaded")
 		return fmt.Errorf("read config: %w", err)
 	}
 
 	ctx, ok := findContext(config, invocation.ManagedCLI, activeContextName)
 	if !ok {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, "active context not found")
+		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, contextLabel, "active context not found")
+		if sessionVariable != "" {
+			return fmt.Errorf("context %s from %s does not exist for %s; run cloak %s context list", activeContextName, sessionVariable, invocation.ManagedCLI, invocation.ManagedCLI)
+		}
 		return fmt.Errorf("active context not found; run cloak %s context configure %s", invocation.ManagedCLI, activeContextName)
 	}
 
 	activated, err := connector.Activate(connectors.Invocation{Args: options.Args, Env: options.Env}, ctx, options.Secrets)
 	if err != nil {
-		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, activeContextName, err.Error())
+		notice.ActivationFailed(options.Stderr, invocation.ManagedCLI, contextLabel, err.Error())
 		return fmt.Errorf("%w; run cloak %s context configure %s", err, invocation.ManagedCLI, activeContextName)
 	}
 
-	notice.Activated(options.Stderr, invocation.ManagedCLI, activeContextName)
+	notice.Activated(options.Stderr, invocation.ManagedCLI, contextLabel)
 	argv := append([]string{realPath}, activated.Args...)
 	return options.Delegate.Exec(realPath, argv, activated.Env)
 }
@@ -144,6 +155,19 @@ func prepareInvocationOptions(options InvocationOptions) (InvocationOptions, err
 func delegateUnchanged(options InvocationOptions, realPath string) error {
 	argv := append([]string{realPath}, options.Args...)
 	return options.Delegate.Exec(realPath, argv, options.Env)
+}
+
+func sessionContext(managedCLI string, env []string) (name, variable string) {
+	variable = "CLOAK_" + strings.ToUpper(strings.ReplaceAll(managedCLI, "-", "_")) + "_CONTEXT"
+	for i := len(env) - 1; i >= 0; i-- {
+		if value, ok := strings.CutPrefix(env[i], variable+"="); ok {
+			if value == "" {
+				return "", ""
+			}
+			return value, variable
+		}
+	}
+	return "", ""
 }
 
 func findContext(config contextstore.Config, managedCLI, contextName string) (contextstore.Context, bool) {

@@ -31,7 +31,7 @@ Do not introduce these in v1 unless an ADR is added first:
 - project-local Active Contexts
 - arbitrary/unregistered CLIs
 - executable Connector hooks or scripts
-- one-shot context selection
+- one-shot context selection other than `CLOAK_<CLI>_CONTEXT` (ADR 0022)
 - Windows-specific shim behavior
 - disk logging
 - shell completions

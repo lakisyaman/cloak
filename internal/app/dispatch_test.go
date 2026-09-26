@@ -190,8 +190,93 @@ func TestExecuteInvocationActivatesActiveContext(t *testing.T) {
 	if !contains(delegate.env, "PGPASSWORD=secret") {
 		t.Fatalf("expected activated env, got %#v", delegate.env)
 	}
-	if !strings.Contains(stderr.String(), "cloak: activated psql context production") {
+	if stderr.String() != "cloak: activated psql context production\n" {
 		t.Fatalf("expected activated Invocation Notice, got %q", stderr.String())
+	}
+}
+
+func sessionContextOptions(t *testing.T, args, env []string, stderr *bytes.Buffer, delegate *recordingDelegate) InvocationOptions {
+	t.Helper()
+	return InvocationOptions{
+		Argv0:    "/tmp/shims/psql",
+		Args:     args,
+		Stderr:   stderr,
+		Resolver: fakeResolver{path: "/real/psql"},
+		Delegate: delegate,
+		Store: memoryRepository{
+			config: contextstore.Config{Version: contextstore.Version, ManagedCLIs: map[string]contextstore.ManagedCLIConfig{
+				"psql": {Contexts: map[string]contextstore.Context{
+					"production": {Metadata: map[string]any{"host": "prod.example.com"}},
+					"staging":    {Metadata: map[string]any{"host": "staging.example.com"}},
+				}},
+			}},
+			state: contextstore.State{Version: contextstore.Version, ActiveContexts: map[string]string{"psql": "production"}},
+		},
+		Connectors: testConnectorStore(t),
+		Secrets:    fakeSecretStore{},
+		Env:        env,
+	}
+}
+
+func TestExecuteInvocationSessionContextWinsOverState(t *testing.T) {
+	var stderr bytes.Buffer
+	delegate := &recordingDelegate{}
+	err := ExecuteInvocationWithOptions(sessionContextOptions(t, []string{"-c", "select 1"}, []string{"CLOAK_PSQL_CONTEXT=staging"}, &stderr, delegate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(delegate.env, "PGHOST=staging.example.com") {
+		t.Fatalf("expected staging activation, got %#v", delegate.env)
+	}
+	if stderr.String() != "cloak: activated psql context staging (from CLOAK_PSQL_CONTEXT)\n" {
+		t.Fatalf("expected session Invocation Notice, got %q", stderr.String())
+	}
+}
+
+func TestExecuteInvocationUnknownSessionContextFailsClosed(t *testing.T) {
+	var stderr bytes.Buffer
+	delegate := &recordingDelegate{}
+	err := ExecuteInvocationWithOptions(sessionContextOptions(t, []string{"-c", "select 1"}, []string{"CLOAK_PSQL_CONTEXT=missing"}, &stderr, delegate))
+	if err == nil || !strings.Contains(err.Error(), "context missing from CLOAK_PSQL_CONTEXT does not exist for psql") {
+		t.Fatalf("expected unknown session context error, got %v", err)
+	}
+	if delegate.called {
+		t.Fatalf("expected unknown session context to fail closed without delegating")
+	}
+	if stderr.String() != "cloak: failed to activate psql context missing (from CLOAK_PSQL_CONTEXT): active context not found\n" {
+		t.Fatalf("expected ActivationFailed notice, got %q", stderr.String())
+	}
+}
+
+func TestExecuteInvocationExplicitConnectionInputPassesThroughSessionContext(t *testing.T) {
+	var stderr bytes.Buffer
+	delegate := &recordingDelegate{}
+	env := []string{"CLOAK_PSQL_CONTEXT=staging"}
+	err := ExecuteInvocationWithOptions(sessionContextOptions(t, []string{"--host", "custom", "-c", "select 1"}, env, &stderr, delegate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(delegate.argv, " ") != "/real/psql --host custom -c select 1" || strings.Join(delegate.env, " ") != "CLOAK_PSQL_CONTEXT=staging" {
+		t.Fatalf("expected unchanged pass-through, got argv %#v env %#v", delegate.argv, delegate.env)
+	}
+	if !strings.Contains(stderr.String(), "cloak: explicit connection input detected for psql") {
+		t.Fatalf("expected explicit-input Invocation Notice, got %q", stderr.String())
+	}
+}
+
+func TestSessionContextVariable(t *testing.T) {
+	for _, tc := range []struct {
+		cli, env, wantName, wantVariable string
+	}{
+		{"psql", "CLOAK_PSQL_CONTEXT=prod", "prod", "CLOAK_PSQL_CONTEXT"},
+		{"redis-cli", "CLOAK_REDIS_CLI_CONTEXT=cache", "cache", "CLOAK_REDIS_CLI_CONTEXT"},
+		{"psql", "CLOAK_PSQL_CONTEXT=", "", ""},
+		{"psql", "CLOAK_REDIS_CLI_CONTEXT=cache", "", ""},
+	} {
+		name, variable := sessionContext(tc.cli, []string{tc.env})
+		if name != tc.wantName || variable != tc.wantVariable {
+			t.Fatalf("sessionContext(%q, %q) = %q, %q", tc.cli, tc.env, name, variable)
+		}
 	}
 }
 

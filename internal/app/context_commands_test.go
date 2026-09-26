@@ -95,3 +95,32 @@ func TestContextAddSwitchShowAndActivationThroughCLI(t *testing.T) {
 		t.Fatalf("expected activation notice, got %q", stderr.String())
 	}
 }
+
+func TestContextCurrentAndListReportSessionContext(t *testing.T) {
+	store := newMutableContextStore()
+	store.config.ManagedCLIs = map[string]contextstore.ManagedCLIConfig{"psql": {Contexts: map[string]contextstore.Context{"production": {}, "staging": {}}}}
+	store.state.ActiveContexts = map[string]string{"psql": "production"}
+	env := CommandEnv{Store: store, Secrets: fakeSecretStore{}, Resolver: fakeResolver{path: "/real/psql"}, Connectors: testConnectorStore(t)}
+	run := func(args ...string) string {
+		var out bytes.Buffer
+		cmd := NewRootCommandWithEnv("test", env)
+		cmd.SetArgs(args)
+		cmd.SetOut(&out)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+
+	t.Setenv("CLOAK_PSQL_CONTEXT", "")
+	if got := run("psql", "context", "current"); got != "production\n" {
+		t.Fatalf("expected state context, got %q", got)
+	}
+	t.Setenv("CLOAK_PSQL_CONTEXT", "staging")
+	if got := run("psql", "context", "current"); got != "staging (from CLOAK_PSQL_CONTEXT)\n" {
+		t.Fatalf("expected session context, got %q", got)
+	}
+	if got := run("psql", "context", "list"); got != "  production\n* staging\n" {
+		t.Fatalf("expected session context marked, got %q", got)
+	}
+}

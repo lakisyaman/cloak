@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"sort"
 
@@ -61,9 +62,10 @@ func listContexts(stdout io.Writer, env CommandEnv, managedCLI string, indented 
 	if indented {
 		prefix = "  "
 	}
+	active := effectiveContext(state, managedCLI)
 	for _, name := range names {
 		marker := " "
-		if state.ActiveContexts[managedCLI] == name {
+		if active == name {
 			marker = "*"
 		}
 		fmt.Fprintf(stdout, "%s%s %s\n", prefix, marker, name)
@@ -74,6 +76,10 @@ func listContexts(stdout io.Writer, env CommandEnv, managedCLI string, indented 
 func currentContext(stdout io.Writer, env CommandEnv, managedCLI string) error {
 	if err := validateManagedCLI(managedCLI); err != nil {
 		return err
+	}
+	if name, variable := sessionContext(managedCLI, os.Environ()); name != "" {
+		fmt.Fprintf(stdout, "%s (from %s)\n", name, variable)
+		return nil
 	}
 	state, err := env.Store.ReadState()
 	if err != nil {
@@ -198,11 +204,18 @@ func showContext(stdout io.Writer, env CommandEnv, managedCLI, name string) erro
 		fmt.Fprintf(stdout, "%s: <stored>\n", key)
 	}
 	active := "no"
-	if state.ActiveContexts[managedCLI] == name {
+	if effectiveContext(state, managedCLI) == name {
 		active = "yes"
 	}
 	fmt.Fprintf(stdout, "active: %s\n", active)
 	return nil
+}
+
+func effectiveContext(state contextstore.State, managedCLI string) string {
+	if name, _ := sessionContext(managedCLI, os.Environ()); name != "" {
+		return name
+	}
+	return state.ActiveContexts[managedCLI]
 }
 
 func deleteOldSecrets(stderr io.Writer, store secrets.Store, oldContext, newContext contextstore.Context) {
