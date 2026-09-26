@@ -27,16 +27,30 @@ func (d *Definition) Detect(inv Invocation) Inputs {
 	for _, flag := range d.Passthrough.Flags {
 		values[flag] = true
 	}
+	inputs := []Input{d.Passthrough}
 	for _, f := range d.Fields {
 		for _, flag := range f.Input.Flags {
 			values[flag] = f.Type != "boolean"
 		}
+		inputs = append(inputs, f.Input)
 	}
-	flags, positionals := parseArgs(inv.Args, values, d.Parsing)
+	for _, input := range inputs {
+		for _, v := range input.FlagValues {
+			values[v.Flag] = true
+		}
+	}
+	flags, flagValues, positionals := parseArgs(inv.Args, values, d.Parsing)
 	matches := func(input Input) bool {
 		for _, flag := range input.Flags {
 			if flags[flag] {
 				return true
+			}
+		}
+		for _, v := range input.FlagValues {
+			for _, value := range flagValues[v.Flag] {
+				if v.matches(value) {
+					return true
+				}
 			}
 		}
 		for _, key := range input.Env {
@@ -45,16 +59,8 @@ func (d *Definition) Detect(inv Invocation) Inputs {
 			}
 		}
 		for _, p := range input.Positionals {
-			if p.Index >= len(positionals) {
-				continue
-			}
-			if len(p.Prefixes) == 0 {
+			if p.Index < len(positionals) && p.matches(positionals[p.Index]) {
 				return true
-			}
-			for _, prefix := range p.Prefixes {
-				if strings.HasPrefix(positionals[p.Index], prefix) {
-					return true
-				}
 			}
 		}
 		return false
@@ -73,8 +79,26 @@ func (d *Definition) Detect(inv Invocation) Inputs {
 	return result
 }
 
-func parseArgs(args []string, values map[string]bool, parsing Parsing) (map[string]bool, []string) {
+func (m ValueMatch) matches(value string) bool {
+	if m.empty() {
+		return true
+	}
+	for _, prefix := range m.Prefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	for _, part := range m.Contains {
+		if strings.Contains(value, part) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseArgs(args []string, values map[string]bool, parsing Parsing) (map[string]bool, map[string][]string, []string) {
 	flags := map[string]bool{}
+	flagValues := map[string][]string{}
 	var positionals []string
 	operands := false
 	for i := 0; i < len(args); i++ {
@@ -97,11 +121,15 @@ func parseArgs(args []string, values map[string]bool, parsing Parsing) (map[stri
 			}
 			continue
 		}
-		name, _, attached := strings.Cut(arg, "=")
+		name, value, attached := strings.Cut(arg, "=")
 		if takesValue, known := values[name]; known {
 			flags[name] = true
 			if takesValue && !attached && i+1 < len(args) {
 				i++
+				value, attached = args[i], true
+			}
+			if takesValue && attached {
+				flagValues[name] = append(flagValues[name], value)
 			}
 			continue
 		}
@@ -113,15 +141,18 @@ func parseArgs(args []string, values map[string]bool, parsing Parsing) (map[stri
 					flags[short] = true
 				}
 				if takesValue {
-					if j == len(arg)-1 && i+1 < len(args) {
+					if j < len(arg)-1 {
+						flagValues[short] = append(flagValues[short], arg[j+1:])
+					} else if i+1 < len(args) {
 						i++
+						flagValues[short] = append(flagValues[short], args[i])
 					}
 					break
 				}
 			}
 		}
 	}
-	return flags, positionals
+	return flags, flagValues, positionals
 }
 
 // Value converts stored values as well as command-line strings. In particular,

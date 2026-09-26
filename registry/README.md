@@ -9,7 +9,7 @@ To contribute a Connector:
 3. Include parser hints needed to separate native option values from operands. Add meaningful behavioral tests in `internal/connectors`, using the YAML file. No CLI-specific Go implementation should be necessary.
 4. Run `go test ./...`; use real-client integration tests when available. The test suite validates every YAML file in this directory.
 
-The initial definitions preserve the supported connection, authentication, database, and transport behavior of the previous built-in implementation. psql database flags always use the agreed field override behavior. MongoDB's full URI is stored as Secret Material and supports both ordinary and credential-bearing URIs.
+The initial definitions preserve the supported connection, authentication, database, and transport behavior of the previous built-in implementation. psql database flags and the database operand override the default database, except when their value is a libpq connection string, which skips the Context. MongoDB's full URI is stored as Secret Material and supports both ordinary and credential-bearing URIs.
 
 The MySQL definition stores the password as Secret Material and injects it through
 `MYSQL_PWD`, because the native `-p` option accepts no separate value. `--ssl-mode`

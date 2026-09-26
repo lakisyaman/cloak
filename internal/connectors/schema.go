@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,13 +37,25 @@ type Field struct {
 
 type Input struct {
 	Flags       []string     `yaml:"flags,omitempty"`
+	FlagValues  []FlagValue  `yaml:"flagValues,omitempty"`
 	Env         []string     `yaml:"env,omitempty"`
 	Positionals []Positional `yaml:"positionals,omitempty"`
 }
 
-type Positional struct {
-	Index    int      `yaml:"index"`
+// ValueMatch selects an input by its value. An empty matcher accepts any value.
+type ValueMatch struct {
 	Prefixes []string `yaml:"prefixes,omitempty"`
+	Contains []string `yaml:"contains,omitempty"`
+}
+
+type Positional struct {
+	Index      int `yaml:"index"`
+	ValueMatch `yaml:",inline"`
+}
+
+type FlagValue struct {
+	Flag       string `yaml:"flag"`
+	ValueMatch `yaml:",inline"`
 }
 
 type Injection struct {
@@ -118,7 +131,20 @@ func (f Field) FlagName(name string) string {
 	return strings.ToLower(name)
 }
 
-func (i Input) empty() bool { return len(i.Flags)+len(i.Env)+len(i.Positionals) == 0 }
+func (i Input) empty() bool {
+	return len(i.Flags)+len(i.FlagValues)+len(i.Env)+len(i.Positionals) == 0
+}
+
+func (m ValueMatch) empty() bool { return len(m.Prefixes)+len(m.Contains) == 0 }
+
+func (m ValueMatch) validate() error {
+	for _, pattern := range slices.Concat(m.Prefixes, m.Contains) {
+		if pattern == "" || strings.ContainsAny(pattern, "\x00\r\n") {
+			return fmt.Errorf("invalid value pattern")
+		}
+	}
+	return nil
+}
 
 func (d *Definition) Validate() error {
 	if d.Version != 1 {
@@ -144,16 +170,29 @@ func (d *Definition) Validate() error {
 			}
 			inputs["env:"+env] = true
 		}
+		for _, v := range input.FlagValues {
+			if !flagPattern.MatchString(v.Flag) || v.empty() || inputs["value:"+v.Flag] {
+				return fmt.Errorf("invalid or repeated input flag value")
+			}
+			inputs["value:"+v.Flag] = true
+			if err := v.validate(); err != nil {
+				return err
+			}
+			for _, field := range d.Fields {
+				if field.Type == "boolean" && slices.Contains(field.Input.Flags, v.Flag) {
+					return fmt.Errorf("boolean input cannot consume a value")
+				}
+			}
+		}
 		for _, p := range input.Positionals {
-			key := fmt.Sprintf("position:%d", p.Index)
+			// A value-matched positional may share its index with one plain positional.
+			key := fmt.Sprintf("position:%d:%t", p.Index, p.empty())
 			if p.Index < 0 || inputs[key] {
 				return fmt.Errorf("invalid or repeated positional input")
 			}
 			inputs[key] = true
-			for _, prefix := range p.Prefixes {
-				if prefix == "" || strings.ContainsAny(prefix, "\x00\r\n") {
-					return fmt.Errorf("invalid positional prefix")
-				}
+			if err := p.validate(); err != nil {
+				return err
 			}
 		}
 		return nil
