@@ -6,6 +6,10 @@ parsing:
   valueFlags: ["-F", "-L", "-P", "-R", "-T", "-c", "-f", "-o", "-v", "--command", "--file", "--field-separator", "--log-file", "--output", "--pset", "--record-separator", "--set", "--table-attr", "--variable"]
 passthrough:
   env: [PGSERVICE, PGSERVICEFILE, PGPASSFILE, PGHOSTADDR]
+  flagValues:
+    - {flag: "-d", prefixes: ["postgresql://", "postgres://"], contains: ["="]}
+    - {flag: "--dbname", prefixes: ["postgresql://", "postgres://"], contains: ["="]}
+  positionals: [{index: 0, prefixes: ["postgresql://", "postgres://"], contains: ["="]}]
 fields:
   host:
     type: string

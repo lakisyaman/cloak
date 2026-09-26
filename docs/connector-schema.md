@@ -71,11 +71,11 @@ Types are checked without echoing invalid values. Integer/number/boolean configu
 
 ## Inputs and precedence
 
-`input` and top-level `passthrough` accept `flags: ["-h", "--host"]`, `env: [PGHOST]`, and `positionals: [{index: 0}]`. Positional indices start at zero after removing parsed options and their values. An optional `prefixes` list selects a positional input only when it starts with one of the strings, as used to recognize a MongoDB URI. It does not introduce conditional flag behavior.
+`input` and top-level `passthrough` accept `flags: ["-h", "--host"]`, `flagValues: [{flag: "-d", prefixes: ["postgres://"], contains: ["="]}]`, `env: [PGHOST]`, and `positionals: [{index: 0}]`. Positional indices start at zero after removing parsed options and their values. Optional `prefixes` and `contains` lists on a positional select it only when its value starts with or contains one of the strings, as used to recognize a MongoDB URI. A `flagValues` entry needs at least one of the lists and matches when any value of that flag does; the flag consumes a value for parsing purposes and cannot be a boolean field flag. A value-matched positional or flag may repeat one plain selector for the same position or flag (see [ADR 0023](adr/0023-select-connection-strings-by-value.md)).
 
 All selectors are alternatives. Presence of a declared flag is enough to match, including a missing native value; the Real Command still receives the original arguments and determines native syntax validity. Environment selectors match nonempty variables. A passthrough match anywhere wins over overrides and bypasses all Context access. An override suppresses validation, secret lookup, and injection for that field; it never rewrites the caller's value.
 
-For example, psql's `-d` and `--dbname` always override only the default database, regardless of their values. There is no `passthroughWhen`, `role`, or `takesValue` property.
+For example, psql's `-d`, `--dbname`, and database operand override only the default database, while a top-level passthrough value selector skips the Context when the same input holds a `postgres://` URI or a `key=value` connection string. There is no `passthroughWhen`, `role`, or `takesValue` property.
 
 ## Parsing hints
 

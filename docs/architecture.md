@@ -30,7 +30,7 @@ Installation and update do not create, configure, select, or validate Contexts. 
 
 `internal/connectors` contains one YAML parser, input detector, Activation engine, and installed-definition store. There are no Managed CLI-specific Go implementations. `mongosh`, `mysql`, `psql`, and `redis-cli` are optional reference definitions.
 
-Version 1 accepts scalar fields, required and secret annotations, configuration flag names, input selectors, injection bindings, and a URI default-path operation. Unknown schema properties, duplicate YAML keys, conflicting bindings, unsupported versions, and invalid command names fail validation. Embedded scripts, hooks, expressions, arbitrary templates, and value-dependent input behaviors are unsupported.
+Version 1 accepts scalar fields, required and secret annotations, configuration flag names, input selectors, injection bindings, and a URI default-path operation. Unknown schema properties, duplicate YAML keys, conflicting bindings, unsupported versions, and invalid command names fail validation. Embedded scripts, hooks, expressions, arbitrary templates, and value-dependent `onInput` behaviors are unsupported; inputs can only be selected by fixed value prefixes or substrings.
 
 Each declared field input has one fixed behavior:
 
@@ -43,7 +43,7 @@ The parser recognizes declared flags, equals forms, environment variables with n
 
 Injection is deterministic: the optional positional binding first, then flags in sorted field-name order, followed by all original arguments. Environment bindings replace the corresponding variable in the child environment. This ephemeral preparation does not modify native config files or the parent environment.
 
-The psql definition always treats `-d` and `--dbname` as database overrides, including values containing a URI. PGDATABASE and the database operand also override the default database. PGSSLMODE composes with connection values. Redis's database and TLS flags override individual fields; connection flags skip the Context. MongoDB's URI operation preserves SRV and multi-host authorities, existing database paths, and queries while adding an escaped Default Database when the URI has no path.
+The psql definition treats `-d`, `--dbname`, PGDATABASE, and the database operand as default database overrides. A `-d`, `--dbname`, or database operand value that is a `postgres://` or `postgresql://` URI or contains `=` is a libpq connection string and skips the Context. PGSSLMODE composes with connection values. Redis's database and TLS flags override individual fields; connection flags skip the Context. MongoDB's URI operation preserves SRV and multi-host authorities, existing database paths, and queries while adding an escaped Default Database when the URI has no path.
 
 ## Context management
 
