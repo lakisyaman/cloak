@@ -141,6 +141,18 @@ cloak redis-cli context --help
 cloak redis-cli context configure --help
 ```
 
+## Parallel sessions
+
+`switch` changes the target for every terminal and agent. To use a different Context in one session, set `CLOAK_<CLI>_CONTEXT`. The name is the Managed CLI in upper case with `-` changed to `_`:
+
+```bash
+export CLOAK_PSQL_CONTEXT=staging     # this shell only
+psql -c "select 1"                    # cloak: activated psql context staging (from CLOAK_PSQL_CONTEXT)
+CLOAK_REDIS_CLI_CONTEXT=cache redis-cli PING
+```
+
+The variable wins over the switched Context. Explicit Connection Input still wins over the variable. If the variable names a Context that does not exist, the command fails and does not fall back. `context current`, `list`, and `show` report the variable when it is set.
+
 ## Set up coding agents
 
 Add Cloak usage guidance to your agent's instruction files:
@@ -165,7 +177,7 @@ If no recognized file exists, an interactive terminal prompts for an agent. In s
 
 Cloak maintains one marked section, preserving surrounding instructions and existing file permissions. Rerun `init` after upgrading Cloak to refresh the guidance; unchanged files are left untouched. Incomplete or duplicate Cloak markers cause an error before any files are written. Symlinks are preserved and shared targets are updated once; current-directory setup rejects links that resolve outside that directory.
 
-The guidance teaches Connector discovery and registry installation, Context inspection and switching, native CLI usage through Shims, configuration, and `--help` navigation. The local/global choice controls where instructions are written; Active Context selection remains user-global. Init does not install Connectors or configure Contexts.
+The guidance teaches Connector discovery and registry installation, Context inspection, session selection with `CLOAK_<CLI>_CONTEXT`, and switching, native CLI usage through Shims, configuration, and `--help` navigation. The local/global choice controls where instructions are written; Active Context selection remains user-global unless `CLOAK_<CLI>_CONTEXT` is set. Init does not install Connectors or configure Contexts.
 
 ## Connector lifecycle
 

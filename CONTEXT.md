@@ -28,6 +28,10 @@ _Avoid_: required database, context identity
 An Active Context selection that applies across the current operating system user account.
 _Avoid_: project context, local context
 
+**Session Context Selection**:
+A Context selected for one Managed CLI through the `CLOAK_<CLI>_CONTEXT` environment variable, which applies only to processes that inherit it.
+_Avoid_: context override, profile variable
+
 **Secret Material**:
 The credential-bearing data needed to use a Context.
 _Avoid_: password, token, credentials
@@ -101,7 +105,10 @@ _Avoid_: connector type, context
 - A **Managed CLI** has zero or more **Contexts**.
 - A **Context** name is unique within its **Managed CLI**, not globally across Cloak.
 - A **Managed CLI** has at most one **User-Global Active Context** at a time.
-- A **User-Global Active Context** is the only supported **Active Context** scope in the initial product.
+- A **User-Global Active Context** and a **Session Context Selection** are the only supported **Active Context** scopes.
+- A **Session Context Selection** wins over the **User-Global Active Context** for the processes that inherit it.
+- A **Session Context Selection** that names a missing **Context** fails closed and never falls back to the **User-Global Active Context**.
+- Cloak's own `CLOAK_*` environment variables are not **Explicit Connection Input**.
 - A **Context** is made of **Context Metadata** and references to **Secret Material**.
 - **Secret Material** is not part of **Context Metadata**.
 - **Secret Material** is not revealed by Context inspection commands.
@@ -113,7 +120,7 @@ _Avoid_: connector type, context
 - **Activation** is ephemeral and does not mutate the Real Command's native configuration.
 - A **Pass-through Invocation** happens when a Managed CLI has no Active Context selected.
 - A **Pass-through Invocation** also happens when a Real Command invocation contains **Explicit Connection Input**.
-- **Explicit Connection Input** wins over an **Active Context** for the whole invocation.
+- **Explicit Connection Input** wins over an **Active Context** for the whole invocation, including a **Session Context Selection**.
 - An unrecognized native CLI option does not by itself prevent **Activation**.
 - **Scope Selection** does not prevent **Activation** by itself.
 - A **Transport Option** does not prevent **Activation** by itself.
@@ -165,6 +172,9 @@ _Avoid_: connector type, context
 > **Dev:** "What if `psql` has an **Active Context**, but the caller passes `PGHOST=custom-host`?"
 > **Domain expert:** "That is **Explicit Connection Input**, so Cloak performs a **Pass-through Invocation** instead of mixing caller input with the Active Context."
 >
+> **Dev:** "Two agents need `psql` against different Contexts at the same time. What should they do?"
+> **Domain expert:** "Each agent sets `CLOAK_PSQL_CONTEXT` in its own shell. That **Session Context Selection** wins over the **User-Global Active Context**, so one agent cannot change the other's target."
+>
 > **Dev:** "What if the caller only passes `psql analytics`?"
 > **Domain expert:** "That is **Scope Selection**, so Cloak can still apply the Active Context for host and identity."
 >
@@ -184,7 +194,7 @@ _Avoid_: connector type, context
 - "credentials" often mixes secret and non-secret connection data; in Cloak, **Context Metadata** and **Secret Material** are separate concepts.
 - "database" does not define a **Context** by itself; when present, it is an optional **Default Database**.
 - Creating a Context is **Context Enrollment**, setting or changing its values is **Context Configuration**, and obtaining access uses an **Authentication Flow**.
-- "local context" and "project context" are intentionally out of scope for the initial product; the selected **Active Context** is user-global.
+- "local context" and "project context" are intentionally out of scope for the initial product; the selected **Active Context** is user-global unless a **Session Context Selection** applies.
 - "Adapter" was the former term for Managed CLI-specific behavior; **Connector** is the canonical term for its user-configurable definition.
 - "Connector Registry" means the catalog of available definitions; it does not mean the set of Connectors a user has registered.
 - "Registry Connector" and "local Connector" describe different **Connector Sources**, not different execution models.
